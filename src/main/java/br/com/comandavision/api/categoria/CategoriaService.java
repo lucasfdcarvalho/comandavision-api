@@ -1,5 +1,7 @@
 package br.com.comandavision.api.categoria;
 
+import java.util.List;
+
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,5 +24,12 @@ public class CategoriaService {
         Categoria categoriaSalva = categoriaRepository.save(categoria);
 
         return CategoriaResponse.from(categoriaSalva);
+    }
+
+    @Transactional(readOnly = true)
+    public List<CategoriaResponse> listar() {
+        return categoriaRepository.findAll().stream()
+                .map(CategoriaResponse::from)
+                .toList();
     }
 }

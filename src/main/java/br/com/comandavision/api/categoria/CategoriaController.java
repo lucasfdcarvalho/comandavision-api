@@ -1,6 +1,9 @@
 package br.com.comandavision.api.categoria;
 
+import java.util.List;
+
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -25,5 +28,10 @@ public class CategoriaController {
     @ResponseStatus(HttpStatus.CREATED)
     public CategoriaResponse criar(@Valid @RequestBody CriarCategoriaRequest request) {
         return categoriaService.criar(request);
+    }
+
+    @GetMapping
+    public List<CategoriaResponse> listar() {
+        return categoriaService.listar();
     }
 }
