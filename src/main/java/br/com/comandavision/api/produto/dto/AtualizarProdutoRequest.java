@@ -9,7 +9,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
-public record CriarProdutoRequest(
+public record AtualizarProdutoRequest(
         @NotBlank(message = "O nome do produto é obrigatório")
         @Size(max = 120, message = "O nome deve ter no máximo 120 caracteres")
         String nome,
@@ -24,6 +24,9 @@ public record CriarProdutoRequest(
 
         @NotNull(message = "A categoria é obrigatória")
         @Positive(message = "O ID da categoria deve ser um número positivo")
-        Long categoriaId) {
+        Long categoriaId,
+
+        @NotNull(message = "A situação do produto é obrigatória")
+        Boolean ativo) {
 
 }
