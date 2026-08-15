@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import br.com.comandavision.api.categoria.dto.CategoriaResponse;
 import br.com.comandavision.api.categoria.dto.CriarCategoriaRequest;
+import br.com.comandavision.api.categoria.dto.AtualizarCategoriaRequest;
 
 @Service
 public class CategoriaService {
@@ -37,6 +38,18 @@ public class CategoriaService {
     public CategoriaResponse buscarPorId(Long id) {
         Categoria categoria = categoriaRepository.findById(id)
                 .orElseThrow(() -> new CategoriaNaoEncontradaException(id));
+
+        return CategoriaResponse.from(categoria);
+    }
+
+    @Transactional
+    public CategoriaResponse atualizar(Long id, AtualizarCategoriaRequest request) {
+        Categoria categoria = categoriaRepository.findById(id)
+                .orElseThrow(() -> new CategoriaNaoEncontradaException(id));
+
+        categoria.setNome(request.nome());
+        categoria.setDescricao(request.descricao());
+        categoria.setAtiva(request.ativa());
 
         return CategoriaResponse.from(categoria);
     }
