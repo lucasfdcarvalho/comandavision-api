@@ -32,4 +32,12 @@ public class CategoriaService {
                 .map(CategoriaResponse::from)
                 .toList();
     }
+
+    @Transactional(readOnly = true)
+    public CategoriaResponse buscarPorId(Long id) {
+        Categoria categoria = categoriaRepository.findById(id)
+                .orElseThrow(() -> new CategoriaNaoEncontradaException(id));
+
+        return CategoriaResponse.from(categoria);
+    }
 }
