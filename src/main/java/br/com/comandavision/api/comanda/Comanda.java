@@ -104,4 +104,8 @@ public class Comanda {
         this.fechadaEm = OffsetDateTime.now();
     }
 
+    public boolean estaAberta() {
+        return this.status == StatusComanda.ABERTA;
+    }
+
 }
