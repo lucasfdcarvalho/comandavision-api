@@ -9,6 +9,7 @@ import br.com.comandavision.api.comanda.dto.ComandaResponse;
 import br.com.comandavision.api.comanda.dto.CriarComandaRequest;
 import br.com.comandavision.api.comanda.dto.ItemComandaResponse;
 import br.com.comandavision.api.comanda.dto.ComandaDetalhadaResponse;
+import br.com.comandavision.api.comanda.dto.AtualizarItemComandaRequest;
 import br.com.comandavision.api.produto.Produto;
 import br.com.comandavision.api.produto.ProdutoInativoException;
 import br.com.comandavision.api.produto.ProdutoNaoEncontradoException;
@@ -84,5 +85,52 @@ public class ComandaService {
         ItemComanda itemSalvo = itemComandaRepository.save(item);
 
         return ItemComandaResponse.from(itemSalvo);
+    }
+
+    @Transactional
+    public ItemComandaResponse atualizarItem(
+            Long comandaId,
+            Long itemId,
+            AtualizarItemComandaRequest request) {
+
+        Comanda comanda = comandaRepository.findById(comandaId)
+                .orElseThrow(() -> new ComandaNaoEncontradaException(comandaId));
+
+        if (!comanda.estaAberta()) {
+            throw new ComandaNaoEstaAbertaException(
+                    comanda.getId(),
+                    comanda.getStatus());
+        }
+
+        ItemComanda item = itemComandaRepository
+                .findByIdAndComandaId(itemId, comandaId)
+                .orElseThrow(() -> new ItemComandaNaoEncontradoException(
+                        itemId,
+                        comandaId));
+
+        item.setQuantidade(request.quantidade());
+        item.setObservacao(request.observacao());
+
+        return ItemComandaResponse.from(item);
+    }
+
+    @Transactional
+    public void removerItem(Long comandaId, Long itemId) {
+        Comanda comanda = comandaRepository.findById(comandaId)
+                .orElseThrow(() -> new ComandaNaoEncontradaException(comandaId));
+
+        if (!comanda.estaAberta()) {
+            throw new ComandaNaoEstaAbertaException(
+                    comanda.getId(),
+                    comanda.getStatus());
+        }
+
+        ItemComanda item = itemComandaRepository
+                .findByIdAndComandaId(itemId, comandaId)
+                .orElseThrow(() -> new ItemComandaNaoEncontradoException(
+                        itemId,
+                        comandaId));
+
+        itemComandaRepository.delete(item);
     }
 }
