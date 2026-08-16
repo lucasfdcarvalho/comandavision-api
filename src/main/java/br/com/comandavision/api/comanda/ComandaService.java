@@ -8,6 +8,7 @@ import br.com.comandavision.api.comanda.dto.AdicionarItemComandaRequest;
 import br.com.comandavision.api.comanda.dto.ComandaResponse;
 import br.com.comandavision.api.comanda.dto.CriarComandaRequest;
 import br.com.comandavision.api.comanda.dto.ItemComandaResponse;
+import br.com.comandavision.api.comanda.dto.ComandaDetalhadaResponse;
 import br.com.comandavision.api.produto.Produto;
 import br.com.comandavision.api.produto.ProdutoInativoException;
 import br.com.comandavision.api.produto.ProdutoNaoEncontradoException;
@@ -44,9 +45,13 @@ public class ComandaService {
     }
 
     @Transactional(readOnly = true)
-    public ComandaResponse buscarPorId(Long id) {
-        Comanda comanda = this.comandaRepository.findById(id).orElseThrow(() -> new ComandaNaoEncontradaException(id));
-        return ComandaResponse.from(comanda);
+    public ComandaDetalhadaResponse buscarPorId(Long id) {
+        Comanda comanda = comandaRepository.findById(id)
+                .orElseThrow(() -> new ComandaNaoEncontradaException(id));
+
+        List<ItemComanda> itens = itemComandaRepository.findByComandaIdOrderByCriadoEmAsc(id);
+
+        return ComandaDetalhadaResponse.from(comanda, itens);
     }
 
     @Transactional

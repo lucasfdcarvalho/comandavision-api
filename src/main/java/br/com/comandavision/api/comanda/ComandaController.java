@@ -14,6 +14,7 @@ import br.com.comandavision.api.comanda.dto.AdicionarItemComandaRequest;
 import br.com.comandavision.api.comanda.dto.ComandaResponse;
 import br.com.comandavision.api.comanda.dto.CriarComandaRequest;
 import br.com.comandavision.api.comanda.dto.ItemComandaResponse;
+import br.com.comandavision.api.comanda.dto.ComandaDetalhadaResponse;
 import jakarta.validation.Valid;
 
 @RestController
@@ -37,7 +38,7 @@ public class ComandaController {
     }
 
     @GetMapping("/{id}")
-    public ComandaResponse buscarPorId(@PathVariable Long id) {
+    public ComandaDetalhadaResponse buscarPorId(@PathVariable Long id) {
         return this.comandaService.buscarPorId(id);
     }
 
