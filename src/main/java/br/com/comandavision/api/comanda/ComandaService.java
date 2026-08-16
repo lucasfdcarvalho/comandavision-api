@@ -133,4 +133,44 @@ public class ComandaService {
 
         itemComandaRepository.delete(item);
     }
+
+    @Transactional
+    public ComandaDetalhadaResponse fechar(Long id) {
+        Comanda comanda = comandaRepository.findById(id)
+                .orElseThrow(() -> new ComandaNaoEncontradaException(id));
+
+        if (!comanda.estaAberta()) {
+            throw new ComandaNaoEstaAbertaException(
+                    comanda.getId(),
+                    comanda.getStatus());
+        }
+
+        List<ItemComanda> itens = itemComandaRepository.findByComandaIdOrderByCriadoEmAsc(id);
+
+        if (itens.isEmpty()) {
+            throw new ComandaSemItensException(id);
+        }
+
+        comanda.fechar();
+
+        return ComandaDetalhadaResponse.from(comanda, itens);
+    }
+
+    @Transactional
+    public ComandaDetalhadaResponse cancelar(Long id) {
+        Comanda comanda = comandaRepository.findById(id)
+                .orElseThrow(() -> new ComandaNaoEncontradaException(id));
+
+        if (!comanda.estaAberta()) {
+            throw new ComandaNaoEstaAbertaException(
+                    comanda.getId(),
+                    comanda.getStatus());
+        }
+
+        List<ItemComanda> itens = itemComandaRepository.findByComandaIdOrderByCriadoEmAsc(id);
+
+        comanda.cancelar();
+
+        return ComandaDetalhadaResponse.from(comanda, itens);
+    }
 }

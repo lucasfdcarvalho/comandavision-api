@@ -4,6 +4,7 @@ import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -73,5 +74,15 @@ public class ComandaController {
             @PathVariable Long itemId) {
 
         comandaService.removerItem(comandaId, itemId);
+    }
+
+    @PatchMapping("/{id}/fechar")
+    public ComandaDetalhadaResponse fechar(@PathVariable Long id) {
+        return comandaService.fechar(id);
+    }
+
+    @PatchMapping("/{id}/cancelar")
+    public ComandaDetalhadaResponse cancelar(@PathVariable Long id) {
+        return comandaService.cancelar(id);
     }
 }
