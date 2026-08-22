@@ -14,96 +14,137 @@ import br.com.comandavision.api.comanda.ItemComandaRepository;
 import br.com.comandavision.api.comanda.StatusComanda;
 import br.com.comandavision.api.pagamento.dto.PagamentoResponse;
 import br.com.comandavision.api.pagamento.dto.RegistrarPagamentoRequest;
+import br.com.comandavision.api.pagamento.dto.ResumoFinanceiroResponse;
 
 @Service
 public class PagamentoService {
-    private final PagamentoRepository pagamentoRepository;
-    private final ComandaRepository comandaRepository;
-    private final ItemComandaRepository itemComandaRepository;
+        private final PagamentoRepository pagamentoRepository;
+        private final ComandaRepository comandaRepository;
+        private final ItemComandaRepository itemComandaRepository;
 
-    public PagamentoService(
-            PagamentoRepository pagamentoRepository,
-            ComandaRepository comandaRepository,
-            ItemComandaRepository itemComandaRepository) {
+        public PagamentoService(
+                        PagamentoRepository pagamentoRepository,
+                        ComandaRepository comandaRepository,
+                        ItemComandaRepository itemComandaRepository) {
 
-        this.pagamentoRepository = pagamentoRepository;
-        this.comandaRepository = comandaRepository;
-        this.itemComandaRepository = itemComandaRepository;
-    }
-
-    @Transactional
-    public PagamentoResponse registrar(
-            Long comandaId,
-            RegistrarPagamentoRequest request) {
-
-        Comanda comanda = comandaRepository.findById(comandaId)
-                .orElseThrow(() -> new ComandaNaoEncontradaException(comandaId));
-
-        if (comanda.getStatus() != StatusComanda.FECHADA) {
-            throw new ComandaNaoPodeReceberPagamentoException(comandaId, comanda.getStatus());
+                this.pagamentoRepository = pagamentoRepository;
+                this.comandaRepository = comandaRepository;
+                this.itemComandaRepository = itemComandaRepository;
         }
 
-        List<ItemComanda> itens = itemComandaRepository.findByComandaIdOrderByCriadoEmAsc(comandaId);
+        @Transactional
+        public PagamentoResponse registrar(
+                        Long comandaId,
+                        RegistrarPagamentoRequest request) {
 
-        BigDecimal totalComanda = itens.stream()
-                .map(ItemComanda::calcularSubtotal)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+                Comanda comanda = comandaRepository.findById(comandaId)
+                                .orElseThrow(() -> new ComandaNaoEncontradaException(comandaId));
 
-        List<Pagamento> pagamentos = pagamentoRepository.findByComandaIdOrderByCriadoEmAsc(comandaId);
+                if (comanda.getStatus() != StatusComanda.FECHADA) {
+                        throw new ComandaNaoPodeReceberPagamentoException(comandaId, comanda.getStatus());
+                }
 
-        BigDecimal totalPago = pagamentos.stream()
-                .filter(Pagamento::estaConfirmado)
-                .map(Pagamento::getValor)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+                List<ItemComanda> itens = itemComandaRepository.findByComandaIdOrderByCriadoEmAsc(comandaId);
 
-        BigDecimal saldoRestante = totalComanda.subtract(totalPago);
+                BigDecimal totalComanda = itens.stream()
+                                .map(ItemComanda::calcularSubtotal)
+                                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        if (request.valor().compareTo(saldoRestante) > 0) {
-            throw new ValorPagamentoExcedeSaldoException(request.valor(), saldoRestante);
+                List<Pagamento> pagamentos = pagamentoRepository.findByComandaIdOrderByCriadoEmAsc(comandaId);
+
+                BigDecimal totalPago = pagamentos.stream()
+                                .filter(Pagamento::estaConfirmado)
+                                .map(Pagamento::getValor)
+                                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                BigDecimal saldoRestante = totalComanda.subtract(totalPago);
+
+                if (request.valor().compareTo(saldoRestante) > 0) {
+                        throw new ValorPagamentoExcedeSaldoException(request.valor(), saldoRestante);
+                }
+
+                Pagamento pagamento = new Pagamento(comanda, request.forma(), request.valor());
+
+                pagamento.confirmar(request.referenciaExterna());
+
+                Pagamento pagamentoSalvo = pagamentoRepository.save(pagamento);
+
+                return PagamentoResponse.from(pagamentoSalvo);
         }
 
-        Pagamento pagamento = new Pagamento(comanda, request.forma(), request.valor());
+        @Transactional
+        public PagamentoResponse cancelar(Long comandaId, Long pagamentoId) {
+                comandaRepository.findById(comandaId)
+                                .orElseThrow(() -> new ComandaNaoEncontradaException(comandaId));
 
-        pagamento.confirmar(request.referenciaExterna());
+                Pagamento pagamento = pagamentoRepository.findByIdAndComandaId(pagamentoId, comandaId)
+                                .orElseThrow(() -> new PagamentoNaoEncontradoException(pagamentoId, comandaId));
 
-        Pagamento pagamentoSalvo = pagamentoRepository.save(pagamento);
+                pagamento.cancelar();
 
-        return PagamentoResponse.from(pagamentoSalvo);
-    }
+                return PagamentoResponse.from(pagamento);
+        }
 
-    @Transactional
-    public PagamentoResponse cancelar(Long comandaId, Long pagamentoId) {
-        comandaRepository.findById(comandaId)
-                .orElseThrow(() -> new ComandaNaoEncontradaException(comandaId));
+        @Transactional
+        public PagamentoResponse estornar(Long comandaId, Long pagamentoId) {
+                comandaRepository.findById(comandaId)
+                                .orElseThrow(() -> new ComandaNaoEncontradaException(comandaId));
 
-        Pagamento pagamento = pagamentoRepository.findByIdAndComandaId(pagamentoId, comandaId)
-                .orElseThrow(() -> new PagamentoNaoEncontradoException(pagamentoId, comandaId));
+                Pagamento pagamento = pagamentoRepository.findByIdAndComandaId(pagamentoId, comandaId)
+                                .orElseThrow(() -> new PagamentoNaoEncontradoException(pagamentoId, comandaId));
 
-        pagamento.cancelar();
+                pagamento.estornar();
 
-        return PagamentoResponse.from(pagamento);
-    }
+                return PagamentoResponse.from(pagamento);
+        }
 
-    @Transactional
-    public PagamentoResponse estornar(Long comandaId, Long pagamentoId) {
-        comandaRepository.findById(comandaId)
-                .orElseThrow(() -> new ComandaNaoEncontradaException(comandaId));
+        @Transactional(readOnly = true)
+        public List<PagamentoResponse> listar(Long comandaId) {
+                comandaRepository.findById(comandaId)
+                                .orElseThrow(() -> new ComandaNaoEncontradaException(comandaId));
+                List<Pagamento> pagamentos = pagamentoRepository.findByComandaIdOrderByCriadoEmAsc(comandaId);
+                return pagamentos.stream()
+                                .map(PagamentoResponse::from)
+                                .toList();
+        }
 
-        Pagamento pagamento = pagamentoRepository.findByIdAndComandaId(pagamentoId, comandaId)
-                .orElseThrow(() -> new PagamentoNaoEncontradoException(pagamentoId, comandaId));
+        @Transactional(readOnly = true)
+        public ResumoFinanceiroResponse buscarResumo(Long comandaId) {
+                comandaRepository.findById(comandaId)
+                                .orElseThrow(() -> new ComandaNaoEncontradaException(comandaId));
 
-        pagamento.estornar();
+                List<ItemComanda> itens = itemComandaRepository
+                                .findByComandaIdOrderByCriadoEmAsc(comandaId);
 
-        return PagamentoResponse.from(pagamento);
-    }
+                BigDecimal totalComanda = itens.stream()
+                                .map(ItemComanda::calcularSubtotal)
+                                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-    @Transactional(readOnly = true)
-    public List<PagamentoResponse> listar(Long comandaId) {
-        comandaRepository.findById(comandaId)
-                .orElseThrow(() -> new ComandaNaoEncontradaException(comandaId));
-        List<Pagamento> pagamentos = pagamentoRepository.findByComandaIdOrderByCriadoEmAsc(comandaId);
-        return pagamentos.stream()
-                .map(PagamentoResponse::from)
-                .toList();
-    }
+                List<Pagamento> pagamentos = pagamentoRepository
+                                .findByComandaIdOrderByCriadoEmAsc(comandaId);
+
+                BigDecimal totalPago = pagamentos.stream()
+                                .filter(Pagamento::estaConfirmado)
+                                .map(Pagamento::getValor)
+                                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                BigDecimal saldoRestante = totalComanda.subtract(totalPago);
+
+                SituacaoPagamento situacao;
+
+                if (totalPago.compareTo(BigDecimal.ZERO) == 0) {
+                        situacao = SituacaoPagamento.NAO_PAGO;
+                } else if (totalPago.compareTo(totalComanda) < 0) {
+                        situacao = SituacaoPagamento.PARCIAL;
+                } else {
+                        situacao = SituacaoPagamento.PAGO;
+                }
+
+                return new ResumoFinanceiroResponse(
+                                comandaId,
+                                totalComanda,
+                                totalPago,
+                                saldoRestante,
+                                situacao);
+        }
 }

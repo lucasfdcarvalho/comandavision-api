@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import br.com.comandavision.api.pagamento.dto.PagamentoResponse;
 import br.com.comandavision.api.pagamento.dto.RegistrarPagamentoRequest;
+import br.com.comandavision.api.pagamento.dto.ResumoFinanceiroResponse;
 import jakarta.validation.Valid;
 
 @RestController
@@ -41,5 +42,10 @@ public class PagamentoController {
     public PagamentoResponse estornar(@PathVariable Long comandaId, @PathVariable Long pagamentoId) {
 
         return pagamentoService.estornar(comandaId, pagamentoId);
+    }
+
+    @GetMapping("/resumo")
+    public ResumoFinanceiroResponse buscarResumo(@PathVariable Long comandaId) {
+        return pagamentoService.buscarResumo(comandaId);
     }
 }
