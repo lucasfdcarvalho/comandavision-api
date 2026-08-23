@@ -1,5 +1,7 @@
 package br.com.comandavision.api.dashboard.service;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.ZoneId;
@@ -10,10 +12,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import br.com.comandavision.api.dashboard.LimiteDashboardInvalidoException;
 import br.com.comandavision.api.dashboard.PeriodoInvalidoException;
+import br.com.comandavision.api.dashboard.dto.FormaPagamentoResumoResponse;
 import br.com.comandavision.api.dashboard.dto.ProdutoMaisVendidoResponse;
 import br.com.comandavision.api.dashboard.dto.ResumoDashboardResponse;
+import br.com.comandavision.api.dashboard.projection.FormaPagamentoResumoProjection;
 import br.com.comandavision.api.dashboard.projection.ResumoDashboardProjection;
 import br.com.comandavision.api.dashboard.repository.DashboardRepository;
+import br.com.comandavision.api.pagamento.FormaPagamento;
 
 @Service
 public class DashboardService {
@@ -63,6 +68,42 @@ public class DashboardService {
                         resultado.getProdutoNome(),
                         resultado.getQuantidadeVendida(),
                         resultado.getFaturamento()))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<FormaPagamentoResumoResponse> buscarResumoPorFormaPagamento(LocalDate inicio, LocalDate fim) {
+
+        this.validarPeriodo(inicio, fim);
+
+        OffsetDateTime inicioPeriodo = this.converterInicio(inicio);
+        OffsetDateTime fimExclusivo = this.converterFimExclusivo(fim);
+
+        List<FormaPagamentoResumoProjection> resultados = dashboardRepository
+                .buscarResumoPorFormaPagamento(inicioPeriodo, fimExclusivo);
+
+        BigDecimal valorTotal = resultados.stream()
+                .map(FormaPagamentoResumoProjection::getValorRecebido)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        return resultados.stream()
+                .map(resultado -> {
+                    BigDecimal percentual;
+
+                    if (valorTotal.compareTo(BigDecimal.ZERO) == 0) {
+                        percentual = BigDecimal.ZERO.setScale(2);
+                    } else {
+                        percentual = resultado.getValorRecebido()
+                                .multiply(BigDecimal.valueOf(100))
+                                .divide(valorTotal, 2, RoundingMode.HALF_UP);
+                    }
+
+                    return new FormaPagamentoResumoResponse(
+                            FormaPagamento.valueOf(resultado.getForma()),
+                            resultado.getQuantidadePagamentos(),
+                            resultado.getValorRecebido(),
+                            percentual);
+                })
                 .toList();
     }
 

@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import br.com.comandavision.api.dashboard.dto.FormaPagamentoResumoResponse;
 import br.com.comandavision.api.dashboard.dto.ProdutoMaisVendidoResponse;
 import br.com.comandavision.api.dashboard.dto.ResumoDashboardResponse;
 import br.com.comandavision.api.dashboard.service.DashboardService;
@@ -40,5 +41,14 @@ public class DashboardController {
             @RequestParam(defaultValue = "5") int limite) {
 
         return dashboardService.buscarProdutosMaisVendidos(inicio, fim, limite);
+    }
+
+    @GetMapping("/formas-pagamento")
+    public List<FormaPagamentoResumoResponse> buscarResumoPorFormaPagamento(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate inicio,
+
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fim) {
+
+        return dashboardService.buscarResumoPorFormaPagamento(inicio, fim);
     }
 }
