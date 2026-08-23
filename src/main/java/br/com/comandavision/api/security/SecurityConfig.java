@@ -13,7 +13,9 @@ public class SecurityConfig {
         @Bean
         public SecurityFilterChain securityFilterChain(
                         HttpSecurity http,
-                        JwtAuthenticationConverter jwtAuthenticationConverter)
+                        JwtAuthenticationConverter jwtAuthenticationConverter,
+                        AutenticacaoNaoRealizadaHandler autenticacaoHandler,
+                        AcessoNegadoHandler acessoNegadoHandler)
                         throws Exception {
 
                 http.csrf(csrf -> csrf.disable())
@@ -22,8 +24,11 @@ public class SecurityConfig {
                                 .authorizeHttpRequests(authorize -> authorize
                                                 .requestMatchers("/api/dashboard/**").hasRole("DONO")
                                                 .anyRequest().authenticated())
-                                .oauth2ResourceServer(oauth2 -> oauth2.jwt(
-                                                jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter)));
+                                .oauth2ResourceServer(oauth2 -> oauth2
+                                                .authenticationEntryPoint(autenticacaoHandler)
+                                                .accessDeniedHandler(acessoNegadoHandler)
+                                                .jwt(jwt -> jwt.jwtAuthenticationConverter(
+                                                                jwtAuthenticationConverter)));
 
                 return http.build();
         }
