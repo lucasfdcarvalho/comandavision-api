@@ -14,94 +14,101 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 @RestControllerAdvice
 public class GlobalExceptionHandler {
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ErroResponse> tratarErroValidacao(
-            MethodArgumentNotValidException exception) {
+        private static final Logger LOGGER = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
-        Map<String, String> campos = new LinkedHashMap<>();
+        @ExceptionHandler(MethodArgumentNotValidException.class)
+        public ResponseEntity<ErroResponse> tratarErroValidacao(
+                        MethodArgumentNotValidException exception) {
 
-        exception.getBindingResult()
-                .getFieldErrors()
-                .forEach(erro -> campos.putIfAbsent(
-                        erro.getField(),
-                        erro.getDefaultMessage()));
+                Map<String, String> campos = new LinkedHashMap<>();
 
-        HttpStatus status = HttpStatus.BAD_REQUEST;
+                exception.getBindingResult()
+                                .getFieldErrors()
+                                .forEach(erro -> campos.putIfAbsent(
+                                                erro.getField(),
+                                                erro.getDefaultMessage()));
 
-        ErroResponse resposta = new ErroResponse(
-                status.value(),
-                status.getReasonPhrase(),
-                "Existem campos inválidos",
-                OffsetDateTime.now(),
-                campos);
+                HttpStatus status = HttpStatus.BAD_REQUEST;
 
-        return ResponseEntity.status(status).body(resposta);
-    }
+                ErroResponse resposta = new ErroResponse(
+                                status.value(),
+                                status.getReasonPhrase(),
+                                "Existem campos inválidos",
+                                OffsetDateTime.now(),
+                                campos);
 
-    @ExceptionHandler(RuntimeException.class)
-    public ResponseEntity<ErroResponse> tratarErroDaAplicacao(
-            RuntimeException exception) {
-
-        ResponseStatus responseStatus = AnnotationUtils.findAnnotation(
-                exception.getClass(),
-                ResponseStatus.class);
-
-        if (responseStatus != null) {
-            HttpStatus status = responseStatus.code();
-
-            ErroResponse resposta = new ErroResponse(
-                    status.value(),
-                    status.getReasonPhrase(),
-                    exception.getMessage(),
-                    OffsetDateTime.now(),
-                    null);
-
-            return ResponseEntity.status(status).body(resposta);
+                return ResponseEntity.status(status).body(resposta);
         }
 
-        HttpStatus status = HttpStatus.INTERNAL_SERVER_ERROR;
+        @ExceptionHandler(RuntimeException.class)
+        public ResponseEntity<ErroResponse> tratarErroDaAplicacao(
+                        RuntimeException exception) {
 
-        ErroResponse resposta = new ErroResponse(
-                status.value(),
-                status.getReasonPhrase(),
-                "Ocorreu um erro interno inesperado",
-                OffsetDateTime.now(),
-                null);
+                ResponseStatus responseStatus = AnnotationUtils.findAnnotation(
+                                exception.getClass(),
+                                ResponseStatus.class);
 
-        return ResponseEntity.status(status).body(resposta);
-    }
+                if (responseStatus != null) {
+                        HttpStatus status = responseStatus.code();
 
-    @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<ErroResponse> tratarCorpoInvalido(
-            HttpMessageNotReadableException exception) {
+                        ErroResponse resposta = new ErroResponse(
+                                        status.value(),
+                                        status.getReasonPhrase(),
+                                        exception.getMessage(),
+                                        OffsetDateTime.now(),
+                                        null);
 
-        HttpStatus status = HttpStatus.BAD_REQUEST;
+                        return ResponseEntity.status(status).body(resposta);
+                }
 
-        ErroResponse resposta = new ErroResponse(
-                status.value(),
-                status.getReasonPhrase(),
-                "O corpo da requisição está inválido. Verifique os valores informados",
-                OffsetDateTime.now(),
-                null);
+                HttpStatus status = HttpStatus.INTERNAL_SERVER_ERROR;
 
-        return ResponseEntity.status(status).body(resposta);
-    }
+                LOGGER.error("Erro inesperado ao processar a requisição", exception);
 
-    @ExceptionHandler(DataIntegrityViolationException.class)
-    public ResponseEntity<ErroResponse> tratarViolacaoDeIntegridade(
-            DataIntegrityViolationException exception) {
+                ErroResponse resposta = new ErroResponse(
+                                status.value(),
+                                status.getReasonPhrase(),
+                                "Ocorreu um erro interno inesperado",
+                                OffsetDateTime.now(),
+                                null);
 
-        HttpStatus status = HttpStatus.CONFLICT;
+                return ResponseEntity.status(status).body(resposta);
+        }
 
-        ErroResponse resposta = new ErroResponse(
-                status.value(),
-                status.getReasonPhrase(),
-                "A operação viola uma regra de integridade dos dados",
-                OffsetDateTime.now(),
-                null);
+        @ExceptionHandler(HttpMessageNotReadableException.class)
+        public ResponseEntity<ErroResponse> tratarCorpoInvalido(
+                        HttpMessageNotReadableException exception) {
 
-        return ResponseEntity.status(status).body(resposta);
-    }
+                HttpStatus status = HttpStatus.BAD_REQUEST;
+
+                ErroResponse resposta = new ErroResponse(
+                                status.value(),
+                                status.getReasonPhrase(),
+                                "O corpo da requisição está inválido. Verifique os valores informados",
+                                OffsetDateTime.now(),
+                                null);
+
+                return ResponseEntity.status(status).body(resposta);
+        }
+
+        @ExceptionHandler(DataIntegrityViolationException.class)
+        public ResponseEntity<ErroResponse> tratarViolacaoDeIntegridade(
+                        DataIntegrityViolationException exception) {
+
+                HttpStatus status = HttpStatus.CONFLICT;
+
+                ErroResponse resposta = new ErroResponse(
+                                status.value(),
+                                status.getReasonPhrase(),
+                                "A operação viola uma regra de integridade dos dados",
+                                OffsetDateTime.now(),
+                                null);
+
+                return ResponseEntity.status(status).body(resposta);
+        }
 }

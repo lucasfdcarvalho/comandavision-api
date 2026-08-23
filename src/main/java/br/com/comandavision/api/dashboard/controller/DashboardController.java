@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import br.com.comandavision.api.dashboard.dto.FaturamentoDiarioResponse;
 import br.com.comandavision.api.dashboard.dto.FormaPagamentoResumoResponse;
 import br.com.comandavision.api.dashboard.dto.ProdutoMaisVendidoResponse;
 import br.com.comandavision.api.dashboard.dto.ResumoDashboardResponse;
@@ -50,5 +51,14 @@ public class DashboardController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fim) {
 
         return dashboardService.buscarResumoPorFormaPagamento(inicio, fim);
+    }
+
+    @GetMapping("/faturamento-diario")
+    public List<FaturamentoDiarioResponse> buscarFaturamentoDiario(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate inicio,
+
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fim) {
+
+        return dashboardService.buscarFaturamentoDiario(inicio, fim);
     }
 }

@@ -12,9 +12,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import br.com.comandavision.api.dashboard.LimiteDashboardInvalidoException;
 import br.com.comandavision.api.dashboard.PeriodoInvalidoException;
+import br.com.comandavision.api.dashboard.dto.FaturamentoDiarioResponse;
 import br.com.comandavision.api.dashboard.dto.FormaPagamentoResumoResponse;
 import br.com.comandavision.api.dashboard.dto.ProdutoMaisVendidoResponse;
 import br.com.comandavision.api.dashboard.dto.ResumoDashboardResponse;
+import br.com.comandavision.api.dashboard.projection.FaturamentoDiarioProjection;
 import br.com.comandavision.api.dashboard.projection.FormaPagamentoResumoProjection;
 import br.com.comandavision.api.dashboard.projection.ResumoDashboardProjection;
 import br.com.comandavision.api.dashboard.repository.DashboardRepository;
@@ -104,6 +106,25 @@ public class DashboardService {
                             resultado.getValorRecebido(),
                             percentual);
                 })
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<FaturamentoDiarioResponse> buscarFaturamentoDiario(LocalDate inicio, LocalDate fim) {
+
+        this.validarPeriodo(inicio, fim);
+
+        OffsetDateTime inicioPeriodo = this.converterInicio(inicio);
+        OffsetDateTime fimExclusivo = this.converterFimExclusivo(fim);
+
+        List<FaturamentoDiarioProjection> resultados = dashboardRepository.buscarFaturamentoDiario(inicioPeriodo,
+                fimExclusivo);
+
+        return resultados.stream()
+                .map(resultado -> new FaturamentoDiarioResponse(
+                        resultado.getData(),
+                        resultado.getFaturamento(),
+                        resultado.getQuantidadeVendas()))
                 .toList();
     }
 
