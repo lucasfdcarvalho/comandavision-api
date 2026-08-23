@@ -22,8 +22,14 @@ public class SecurityConfig {
                                 .sessionManagement(session -> session
                                                 .sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                                 .authorizeHttpRequests(authorize -> authorize
-                                                .requestMatchers("/api/dashboard/**").hasRole("DONO")
-                                                .anyRequest().authenticated())
+                                                .requestMatchers("/api/dashboard/**")
+                                                .hasRole("DONO")
+                                                .requestMatchers("/api/**")
+                                                .hasAnyRole("DONO", "FUNCIONARIO")
+                                                .requestMatchers("/error")
+                                                .permitAll()
+                                                .anyRequest()
+                                                .denyAll())
                                 .oauth2ResourceServer(oauth2 -> oauth2
                                                 .authenticationEntryPoint(autenticacaoHandler)
                                                 .accessDeniedHandler(acessoNegadoHandler)
