@@ -1,5 +1,6 @@
 package br.com.comandavision.api.security;
 
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -16,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.jwt.BadJwtException;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -48,6 +50,22 @@ public class SegurancaDashboardTest {
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.status").value(401))
                 .andExpect(jsonPath("$.mensagem").value("É necessário estar autenticado para acessar este recurso"));
+    }
+
+    @Test
+    public void deveResponderNaoAutenticadoParaTokenExpiradoOuInvalido() throws Exception {
+        when(jwtDecoder.decode(anyString()))
+                .thenThrow(new BadJwtException("Jwt expired"));
+
+        mockMvc.perform(get("/api/dashboard/resumo")
+                .param("inicio", "2026-08-01")
+                .param("fim", "2026-08-31")
+                .header("Authorization", "Bearer token-expirado"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.status").value(401))
+                .andExpect(jsonPath("$.mensagem").value("É necessário estar autenticado para acessar este recurso"));
+
+        verifyNoInteractions(dashboardService);
     }
 
     @Test
