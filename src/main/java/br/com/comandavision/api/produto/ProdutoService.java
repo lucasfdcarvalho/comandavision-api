@@ -1,12 +1,14 @@
 package br.com.comandavision.api.produto;
 
 import java.util.List;
+import java.util.Objects;
 
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import br.com.comandavision.api.categoria.Categoria;
+import br.com.comandavision.api.categoria.CategoriaInativaException;
 import br.com.comandavision.api.categoria.CategoriaNaoEncontradaException;
 import br.com.comandavision.api.categoria.CategoriaRepository;
 import br.com.comandavision.api.produto.dto.AtualizarProdutoRequest;
@@ -28,6 +30,10 @@ public class ProdutoService {
     public ProdutoResponse criar(CriarProdutoRequest request) {
         Categoria categoria = categoriaRepository.findById(request.categoriaId())
                 .orElseThrow(() -> new CategoriaNaoEncontradaException(request.categoriaId()));
+
+        if (!categoria.isAtiva()) {
+            throw new CategoriaInativaException(categoria.getId());
+        }
 
         Produto produto = new Produto(
                 categoria,
@@ -64,6 +70,13 @@ public class ProdutoService {
 
         Categoria categoria = categoriaRepository.findById(request.categoriaId())
                 .orElseThrow(() -> new CategoriaNaoEncontradaException(request.categoriaId()));
+
+        // Manter a categoria atual é permitido mesmo se ela foi desativada; mover para outra inativa, não.
+        boolean trocouCategoria = !Objects.equals(produto.getCategoria().getId(), request.categoriaId());
+
+        if (trocouCategoria && !categoria.isAtiva()) {
+            throw new CategoriaInativaException(request.categoriaId());
+        }
 
         produto.setNome(request.nome());
         produto.setDescricao(request.descricao());

@@ -17,6 +17,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import br.com.comandavision.api.categoria.Categoria;
+import br.com.comandavision.api.categoria.CategoriaInativaException;
 import br.com.comandavision.api.comanda.dto.AdicionarItemComandaRequest;
 import br.com.comandavision.api.comanda.dto.AtualizarItemComandaRequest;
 import br.com.comandavision.api.comanda.dto.ComandaDetalhadaResponse;
@@ -143,5 +144,39 @@ public class ComandaServiceTest {
                 resposta.total());
 
         assertEquals(1, resposta.itens().size());
+    }
+
+    @Test
+    void naoDeveAdicionarItemDeCategoriaInativa() {
+        Long comandaId = 10L;
+        Comanda comanda = new Comanda("Mesa 10", null);
+
+        Categoria categoria = new Categoria(
+                "Sazonais",
+                "Produtos de temporada");
+        categoria.setAtiva(false);
+
+        Produto produto = new Produto(
+                categoria,
+                "Quentão",
+                "Copo 300 ml",
+                new BigDecimal("12.00"));
+
+        AdicionarItemComandaRequest request = new AdicionarItemComandaRequest(
+                5L,
+                1,
+                null);
+
+        when(comandaRepository.findById(comandaId))
+                .thenReturn(Optional.of(comanda));
+
+        when(produtoRepository.findById(5L))
+                .thenReturn(Optional.of(produto));
+
+        assertThrows(
+                CategoriaInativaException.class,
+                () -> comandaService.adicionarItem(comandaId, request));
+
+        verifyNoInteractions(itemComandaRepository);
     }
 }

@@ -11,6 +11,7 @@ import br.com.comandavision.api.comanda.dto.ItemComandaResponse;
 import br.com.comandavision.api.comanda.dto.ComandaDetalhadaResponse;
 import br.com.comandavision.api.comanda.dto.AtualizarItemComandaRequest;
 import br.com.comandavision.api.produto.Produto;
+import br.com.comandavision.api.categoria.CategoriaInativaException;
 import br.com.comandavision.api.produto.ProdutoInativoException;
 import br.com.comandavision.api.produto.ProdutoNaoEncontradoException;
 import br.com.comandavision.api.produto.ProdutoRepository;
@@ -74,6 +75,10 @@ public class ComandaService {
 
         if (!produto.isAtivo()) {
             throw new ProdutoInativoException(produto.getId());
+        }
+
+        if (!produto.getCategoria().isAtiva()) {
+            throw new CategoriaInativaException(produto.getCategoria().getId());
         }
 
         ItemComanda item = new ItemComanda(

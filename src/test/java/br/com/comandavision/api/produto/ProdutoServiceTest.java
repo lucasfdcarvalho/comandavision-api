@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -23,6 +24,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import br.com.comandavision.api.categoria.Categoria;
+import br.com.comandavision.api.categoria.CategoriaInativaException;
 import br.com.comandavision.api.categoria.CategoriaNaoEncontradaException;
 import br.com.comandavision.api.categoria.CategoriaRepository;
 import br.com.comandavision.api.produto.dto.AtualizarProdutoRequest;
@@ -328,5 +330,67 @@ public class ProdutoServiceTest {
 
         verify(produtoRepository).findById(1L);
         verify(categoriaRepository).findById(99L);
+    }
+
+    @Test
+    public void naoDeveCriarProdutoEmCategoriaInativa() {
+        Categoria categoria = new Categoria(
+                "Bebidas",
+                "Refrigerantes, sucos e águas");
+        categoria.setAtiva(false);
+
+        CriarProdutoRequest request = new CriarProdutoRequest(
+                "Coca-Cola 350 ml",
+                "Refrigerante de cola em lata",
+                new BigDecimal("6.50"),
+                1L,
+                null);
+
+        when(categoriaRepository.findById(1L))
+                .thenReturn(Optional.of(categoria));
+
+        assertThrows(
+                CategoriaInativaException.class,
+                () -> produtoService.criar(request));
+
+        verify(produtoRepository, never()).save(any(Produto.class));
+    }
+
+    @Test
+    public void naoDeveMoverProdutoParaCategoriaInativa() {
+        Categoria categoriaAtual = new Categoria(
+                "Bebidas",
+                "Refrigerantes, sucos e águas");
+
+        Categoria categoriaInativa = new Categoria(
+                "Sazonais",
+                "Produtos de temporada");
+        categoriaInativa.setAtiva(false);
+
+        Produto produto = new Produto(
+                categoriaAtual,
+                "Coca-Cola 350 ml",
+                "Refrigerante de cola em lata",
+                new BigDecimal("6.50"));
+
+        AtualizarProdutoRequest request = new AtualizarProdutoRequest(
+                "Coca-Cola 350 ml",
+                "Refrigerante de cola em lata",
+                new BigDecimal("6.50"),
+                2L,
+                true,
+                null);
+
+        when(produtoRepository.findById(1L))
+                .thenReturn(Optional.of(produto));
+
+        when(categoriaRepository.findById(2L))
+                .thenReturn(Optional.of(categoriaInativa));
+
+        assertThrows(
+                CategoriaInativaException.class,
+                () -> produtoService.atualizar(1L, request));
+
+        assertEquals("Bebidas", produto.getCategoria().getNome());
     }
 }
