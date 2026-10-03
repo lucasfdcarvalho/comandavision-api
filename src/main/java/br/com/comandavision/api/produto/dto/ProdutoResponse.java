@@ -15,6 +15,7 @@ public record ProdutoResponse(
         @Schema(description = "Descrição do produto", example = "Refrigerante de cola em lata") String descricao,
         @Schema(description = "Preço unitário do produto", example = "6.50") BigDecimal preco,
         @Schema(description = "Categoria à qual o produto pertence") CategoriaResponse categoria,
+        @Schema(description = "URL pública da imagem do produto", example = "https://xyz.supabase.co/storage/v1/object/public/produtos/coca-cola.jpg", nullable = true) String imagemUrl,
         @Schema(description = "Indica se o produto está ativo", example = "true") boolean ativo,
         @Schema(description = "Data e hora do cadastro", example = "2026-08-29T18:30:00-03:00", accessMode = Schema.AccessMode.READ_ONLY) OffsetDateTime criadoEm,
         @Schema(description = "Data e hora da última atualização", example = "2026-08-29T19:00:00-03:00", accessMode = Schema.AccessMode.READ_ONLY) OffsetDateTime atualizadoEm) {
@@ -26,6 +27,7 @@ public record ProdutoResponse(
                 produto.getDescricao(),
                 produto.getPreco(),
                 CategoriaResponse.from(produto.getCategoria()),
+                produto.getImagemUrl(),
                 produto.isAtivo(),
                 produto.getCriadoEm(),
                 produto.getAtualizadoEm());

@@ -6,6 +6,7 @@ import org.springframework.data.domain.Sort;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -30,6 +31,8 @@ import br.com.comandavision.api.produto.dto.ProdutoResponse;
 
 @ExtendWith(MockitoExtension.class)
 public class ProdutoServiceTest {
+    private static final String URL_IMAGEM = "https://xyz.supabase.co/storage/v1/object/public/produtos/coca-cola.jpg";
+
     @Mock
     private ProdutoRepository produtoRepository;
 
@@ -49,7 +52,8 @@ public class ProdutoServiceTest {
                 "Coca-Cola 350 ml",
                 "Refrigerante de cola em lata",
                 new BigDecimal("6.50"),
-                1L);
+                1L,
+                URL_IMAGEM);
 
         when(categoriaRepository.findById(1L))
                 .thenReturn(Optional.of(categoria));
@@ -69,6 +73,7 @@ public class ProdutoServiceTest {
         assertEquals(
                 "Bebidas",
                 resposta.categoria().nome());
+        assertEquals(URL_IMAGEM, resposta.imagemUrl());
         assertTrue(resposta.ativo());
 
         verify(categoriaRepository).findById(1L);
@@ -81,7 +86,8 @@ public class ProdutoServiceTest {
                 "Coca-Cola 350 ml",
                 "Refrigerante de cola em lata",
                 new BigDecimal("6.50"),
-                99L);
+                99L,
+                null);
 
         when(categoriaRepository.findById(99L))
                 .thenReturn(Optional.empty());
@@ -203,7 +209,8 @@ public class ProdutoServiceTest {
                 "Refrigerante de cola em lata",
                 new BigDecimal("6.50"),
                 2L,
-                false);
+                false,
+                URL_IMAGEM);
 
         when(produtoRepository.findById(1L))
                 .thenReturn(Optional.of(produto));
@@ -223,10 +230,44 @@ public class ProdutoServiceTest {
         assertEquals(
                 "Bebidas sem álcool",
                 resposta.categoria().nome());
+        assertEquals(URL_IMAGEM, resposta.imagemUrl());
         assertFalse(resposta.ativo());
 
         verify(produtoRepository).findById(1L);
         verify(categoriaRepository).findById(2L);
+    }
+
+    @Test
+    public void deveRemoverImagemAoAtualizarProdutoSemImagemUrl() {
+        Categoria categoria = new Categoria(
+                "Bebidas",
+                "Refrigerantes, sucos e águas");
+
+        Produto produto = new Produto(
+                categoria,
+                "Coca-Cola 350 ml",
+                "Refrigerante de cola em lata",
+                new BigDecimal("6.50"),
+                URL_IMAGEM);
+
+        AtualizarProdutoRequest request = new AtualizarProdutoRequest(
+                "Coca-Cola 350 ml",
+                "Refrigerante de cola em lata",
+                new BigDecimal("6.50"),
+                1L,
+                true,
+                null);
+
+        when(produtoRepository.findById(1L))
+                .thenReturn(Optional.of(produto));
+
+        when(categoriaRepository.findById(1L))
+                .thenReturn(Optional.of(categoria));
+
+        ProdutoResponse resposta = produtoService.atualizar(1L, request);
+
+        assertNull(resposta.imagemUrl());
+        assertNull(produto.getImagemUrl());
     }
 
     @Test
@@ -236,7 +277,8 @@ public class ProdutoServiceTest {
                 "Refrigerante de cola em lata",
                 new BigDecimal("6.50"),
                 1L,
-                true);
+                true,
+                null);
 
         when(produtoRepository.findById(99L))
                 .thenReturn(Optional.empty());
@@ -266,7 +308,8 @@ public class ProdutoServiceTest {
                 "Refrigerante de cola em lata",
                 new BigDecimal("6.50"),
                 99L,
-                true);
+                true,
+                null);
 
         when(produtoRepository.findById(1L))
                 .thenReturn(Optional.of(produto));

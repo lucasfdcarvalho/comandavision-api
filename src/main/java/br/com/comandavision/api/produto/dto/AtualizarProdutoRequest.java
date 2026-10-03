@@ -8,6 +8,7 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
@@ -21,6 +22,8 @@ public record AtualizarProdutoRequest(
 
                 @Schema(description = "Identificador da categoria do produto", example = "1", requiredMode = Schema.RequiredMode.REQUIRED) @NotNull(message = "A categoria é obrigatória") @Positive(message = "O ID da categoria deve ser um número positivo") Long categoriaId,
 
-                @Schema(description = "Indica se o produto está ativo", example = "true", requiredMode = Schema.RequiredMode.REQUIRED) @NotNull(message = "A situação do produto é obrigatória") Boolean ativo) {
+                @Schema(description = "Indica se o produto está ativo", example = "true", requiredMode = Schema.RequiredMode.REQUIRED) @NotNull(message = "A situação do produto é obrigatória") Boolean ativo,
+
+                @Schema(description = "URL pública da imagem do produto (Supabase Storage). Envie nulo para não ter imagem", example = "https://xyz.supabase.co/storage/v1/object/public/produtos/coca-cola.jpg", maxLength = 2048) @Size(max = 2048, message = "A URL da imagem deve ter no máximo 2048 caracteres") @Pattern(regexp = "^https?://\\S+$", message = "A URL da imagem deve começar com http:// ou https://") String imagemUrl) {
 
 }

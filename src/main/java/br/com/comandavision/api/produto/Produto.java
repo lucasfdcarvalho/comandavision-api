@@ -38,6 +38,9 @@ public class Produto {
     @Column(nullable = false, precision = 10, scale = 2)
     private BigDecimal preco;
 
+    @Column(name = "imagem_url")
+    private String imagemUrl;
+
     @Column(nullable = false)
     private boolean ativo = true;
 
@@ -54,10 +57,15 @@ public class Produto {
     }
 
     public Produto(Categoria categoria, String nome, String descricao, BigDecimal preco) {
+        this(categoria, nome, descricao, preco, null);
+    }
+
+    public Produto(Categoria categoria, String nome, String descricao, BigDecimal preco, String imagemUrl) {
         this.categoria = categoria;
         this.nome = nome;
         this.descricao = descricao;
         this.preco = preco;
+        this.imagemUrl = imagemUrl;
     }
 
     public Long getId() {
@@ -78,6 +86,10 @@ public class Produto {
 
     public BigDecimal getPreco() {
         return this.preco;
+    }
+
+    public String getImagemUrl() {
+        return this.imagemUrl;
     }
 
     public boolean isAtivo() {
@@ -106,6 +118,10 @@ public class Produto {
 
     public void setPreco(BigDecimal preco) {
         this.preco = preco;
+    }
+
+    public void setImagemUrl(String imagemUrl) {
+        this.imagemUrl = imagemUrl;
     }
 
     public void setAtivo(boolean ativo) {

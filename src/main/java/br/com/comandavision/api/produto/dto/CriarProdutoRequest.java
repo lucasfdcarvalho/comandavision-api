@@ -8,6 +8,7 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
@@ -19,6 +20,8 @@ public record CriarProdutoRequest(
 
                 @Schema(description = "Preço unitário do produto", example = "6.50", minimum = "0.01", requiredMode = Schema.RequiredMode.REQUIRED) @NotNull(message = "O preço é obrigatório") @DecimalMin(value = "0.01", message = "O preço deve ser maior que zero") @Digits(integer = 8, fraction = 2, message = "O preço deve ter no máximo 8 dígitos inteiros e 2 decimais") BigDecimal preco,
 
-                @Schema(description = "Identificador da categoria do produto", example = "1", requiredMode = Schema.RequiredMode.REQUIRED) @NotNull(message = "A categoria é obrigatória") @Positive(message = "O ID da categoria deve ser um número positivo") Long categoriaId) {
+                @Schema(description = "Identificador da categoria do produto", example = "1", requiredMode = Schema.RequiredMode.REQUIRED) @NotNull(message = "A categoria é obrigatória") @Positive(message = "O ID da categoria deve ser um número positivo") Long categoriaId,
+
+                @Schema(description = "URL pública da imagem do produto (Supabase Storage). Envie nulo para não ter imagem", example = "https://xyz.supabase.co/storage/v1/object/public/produtos/coca-cola.jpg", maxLength = 2048) @Size(max = 2048, message = "A URL da imagem deve ter no máximo 2048 caracteres") @Pattern(regexp = "^https?://\\S+$", message = "A URL da imagem deve começar com http:// ou https://") String imagemUrl) {
 
 }

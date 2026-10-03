@@ -33,7 +33,8 @@ public class ProdutoService {
                 categoria,
                 request.nome(),
                 request.descricao(),
-                request.preco());
+                request.preco(),
+                request.imagemUrl());
 
         Produto produtoSalvo = produtoRepository.save(produto);
 
@@ -68,6 +69,7 @@ public class ProdutoService {
         produto.setDescricao(request.descricao());
         produto.setPreco(request.preco());
         produto.setCategoria(categoria);
+        produto.setImagemUrl(request.imagemUrl());
         produto.setAtivo(request.ativo());
 
         return ProdutoResponse.from(produto);
