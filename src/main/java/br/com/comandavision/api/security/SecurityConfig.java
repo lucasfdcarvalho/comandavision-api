@@ -26,7 +26,7 @@ public class SecurityConfig {
                                                                 "/swagger-ui/**",
                                                                 "/v3/api-docs/**")
                                                 .permitAll()
-                                                .requestMatchers("/api/dashboard/**")
+                                                .requestMatchers("/api/dashboard/**", "/api/usuarios/**")
                                                 .hasRole("DONO")
                                                 .requestMatchers("/api/**")
                                                 .hasAnyRole("DONO", "FUNCIONARIO")
