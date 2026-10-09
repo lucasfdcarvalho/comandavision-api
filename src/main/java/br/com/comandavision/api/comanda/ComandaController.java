@@ -42,9 +42,10 @@ public class ComandaController {
         this.comandaService = comandaService;
     }
 
-    @Operation(summary = "Abrir comanda", description = "Abre uma nova comanda para registrar o consumo")
+    @Operation(summary = "Abrir comanda", description = "Abre uma comanda com identificação única entre as abertas, ignorando maiúsculas/minúsculas e espaços nas extremidades")
     @ApiResponses({
             @ApiResponse(responseCode = "201", description = "Comanda aberta com sucesso"),
+            @ApiResponse(responseCode = "409", description = "Já existe uma comanda aberta com essa descrição", content = @Content(schema = @Schema(implementation = ErroResponse.class))),
             @ApiResponse(responseCode = "400", description = "Dados da comanda inválidos", content = @Content(schema = @Schema(implementation = ErroResponse.class)))
     })
     @PostMapping

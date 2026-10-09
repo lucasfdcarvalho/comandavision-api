@@ -1,6 +1,9 @@
 package br.com.comandavision.api.comanda;
 
 import org.springframework.data.domain.Sort;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.hibernate.exception.ConstraintViolationException;
+import org.postgresql.util.PSQLException;
 import org.springframework.stereotype.Service;
 import java.util.List;
 
@@ -33,11 +36,35 @@ public class ComandaService {
 
     @Transactional
     public ComandaResponse abrir(CriarComandaRequest request) {
-        Comanda comanda = new Comanda(request.identificacao(), request.observacao());
+        String identificacao = request.identificacao().trim();
+        if (comandaRepository.existeAbertaComIdentificacao(identificacao)) {
+            throw new ComandaIdentificacaoDuplicadaException();
+        }
 
-        Comanda comandaSalva = this.comandaRepository.save(comanda);
+        Comanda comanda = new Comanda(identificacao, request.observacao());
 
-        return ComandaResponse.from(comandaSalva);
+        try {
+            // O índice arbitra a concorrência. Flush aqui permite traduzir a violação
+            // antes do retorno; não se consulta novamente uma transação já abortada.
+            return ComandaResponse.from(comandaRepository.saveAndFlush(comanda));
+        } catch (DataIntegrityViolationException exception) {
+            for (Throwable causa = exception; causa != null; causa = causa.getCause()) {
+                // O nome estruturado não depende do idioma das mensagens do banco.
+                // Hibernate pode não extraí-lo quando lc_messages não é inglês.
+                if (causa instanceof PSQLException postgres
+                        && "23505".equals(postgres.getSQLState())
+                        && postgres.getServerErrorMessage() != null
+                        && ComandaIdentificacaoDuplicadaException.INDICE_UNICO
+                                .equals(postgres.getServerErrorMessage().getConstraint())) {
+                    throw new ComandaIdentificacaoDuplicadaException(exception);
+                }
+                if (causa instanceof ConstraintViolationException violacao
+                        && ComandaIdentificacaoDuplicadaException.INDICE_UNICO.equals(violacao.getConstraintName())) {
+                    throw new ComandaIdentificacaoDuplicadaException(exception);
+                }
+            }
+            throw exception;
+        }
     }
 
     @Transactional(readOnly = true)

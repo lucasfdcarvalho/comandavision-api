@@ -5,12 +5,20 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.hibernate.exception.ConstraintViolationException;
+import java.sql.SQLException;
+import org.postgresql.util.PSQLException;
+import org.postgresql.util.ServerErrorMessage;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -21,6 +29,7 @@ import br.com.comandavision.api.categoria.CategoriaInativaException;
 import br.com.comandavision.api.comanda.dto.AdicionarItemComandaRequest;
 import br.com.comandavision.api.comanda.dto.AtualizarItemComandaRequest;
 import br.com.comandavision.api.comanda.dto.ComandaDetalhadaResponse;
+import br.com.comandavision.api.comanda.dto.CriarComandaRequest;
 import br.com.comandavision.api.produto.Produto;
 import br.com.comandavision.api.produto.ProdutoRepository;
 
@@ -37,6 +46,65 @@ public class ComandaServiceTest {
 
     @InjectMocks
     private ComandaService comandaService;
+
+    @Test
+    void deveAbrirComandaComIdentificacaoNovaSemEspacosNasExtremidades() {
+        when(comandaRepository.saveAndFlush(any(Comanda.class)))
+                .thenAnswer(invocacao -> invocacao.getArgument(0));
+
+        var resposta = comandaService.abrir(new CriarComandaRequest("  Mesa 01  ", "Aniversário"));
+
+        assertEquals("Mesa 01", resposta.identificacao());
+        assertEquals("Aniversário", resposta.observacao());
+        assertEquals(StatusComanda.ABERTA, resposta.status());
+        verify(comandaRepository).existeAbertaComIdentificacao("Mesa 01");
+    }
+
+    @Test
+    void deveRecusarIdentificacaoJaAbertaAntesDeSalvar() {
+        when(comandaRepository.existeAbertaComIdentificacao("Mesa 01")).thenReturn(true);
+
+        var erro = assertThrows(ComandaIdentificacaoDuplicadaException.class,
+                () -> comandaService.abrir(new CriarComandaRequest("Mesa 01", null)));
+
+        assertEquals("Já existe uma comanda aberta com essa descrição.", erro.getMessage());
+        verify(comandaRepository, never()).saveAndFlush(any(Comanda.class));
+    }
+
+    @Test
+    void deveTraduzirConflitoDoIndiceQuandoOutraPessoaAbreAoMesmoTempo() {
+        var causa = new ConstraintViolationException("duplicada", new SQLException("duplicada", "23505"),
+                ComandaIdentificacaoDuplicadaException.INDICE_UNICO);
+        when(comandaRepository.saveAndFlush(any(Comanda.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicada", causa));
+
+        var erro = assertThrows(ComandaIdentificacaoDuplicadaException.class,
+                () -> comandaService.abrir(new CriarComandaRequest("Mesa 01", null)));
+
+        assertEquals("Já existe uma comanda aberta com essa descrição.", erro.getMessage());
+    }
+
+    @Test
+    void naoDeveConfundirOutrasViolacoesDeIntegridadeComIdentificacaoDuplicada() {
+        var causa = new ConstraintViolationException("outra regra", new SQLException("outra regra", "23514"),
+                "ck_comandas_status");
+        var erroEsperado = new DataIntegrityViolationException("outra regra", causa);
+        when(comandaRepository.saveAndFlush(any(Comanda.class))).thenThrow(erroEsperado);
+
+        assertEquals(erroEsperado, assertThrows(DataIntegrityViolationException.class,
+                () -> comandaService.abrir(new CriarComandaRequest("Mesa 01", null))));
+    }
+
+    @Test
+    void deveReconhecerRestricaoPelosDadosEstruturadosMesmoComMensagemLocalizada() {
+        var erroServidor = new ServerErrorMessage("SERROR\0C23505\0nuk_comandas_abertas_identificacao\0MIdentificação duplicada\0\0");
+        var causa = new PSQLException(erroServidor);
+        when(comandaRepository.saveAndFlush(any(Comanda.class)))
+                .thenThrow(new DataIntegrityViolationException("falha", causa));
+
+        assertThrows(ComandaIdentificacaoDuplicadaException.class,
+                () -> comandaService.abrir(new CriarComandaRequest("Mesa 01", null)));
+    }
 
     @Test
     public void naoDeveFecharComandaSemItens() {
