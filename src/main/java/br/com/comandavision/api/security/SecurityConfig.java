@@ -2,6 +2,7 @@ package br.com.comandavision.api.security;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
@@ -25,6 +26,8 @@ public class SecurityConfig {
                                                 .requestMatchers("/swagger-ui.html",
                                                                 "/swagger-ui/**",
                                                                 "/v3/api-docs/**")
+                                                .permitAll()
+                                                .requestMatchers(HttpMethod.GET, "/health")
                                                 .permitAll()
                                                 .requestMatchers("/api/dashboard/**", "/api/usuarios/**")
                                                 .hasRole("DONO")
