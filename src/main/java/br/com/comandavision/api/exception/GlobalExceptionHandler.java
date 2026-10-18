@@ -10,9 +10,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -76,6 +78,39 @@ public class GlobalExceptionHandler {
                                 "Ocorreu um erro interno inesperado",
                                 OffsetDateTime.now(),
                                 null);
+
+                return ResponseEntity.status(status).body(resposta);
+        }
+
+        // Parâmetro de URL em formato errado (ex.: data "NaN-NaN-NaN" no dashboard). Sem este
+        // tratamento a exceção caía no handler genérico e virava "erro interno" (500).
+        @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+        public ResponseEntity<ErroResponse> tratarParametroInvalido(
+                        MethodArgumentTypeMismatchException exception) {
+
+                return respostaParametroInvalido(
+                                exception.getName(),
+                                "O parâmetro '" + exception.getName() + "' está em um formato inválido");
+        }
+
+        @ExceptionHandler(MissingServletRequestParameterException.class)
+        public ResponseEntity<ErroResponse> tratarParametroAusente(
+                        MissingServletRequestParameterException exception) {
+
+                return respostaParametroInvalido(
+                                exception.getParameterName(),
+                                "O parâmetro '" + exception.getParameterName() + "' é obrigatório");
+        }
+
+        private ResponseEntity<ErroResponse> respostaParametroInvalido(String parametro, String mensagem) {
+                HttpStatus status = HttpStatus.BAD_REQUEST;
+
+                ErroResponse resposta = new ErroResponse(
+                                status.value(),
+                                status.getReasonPhrase(),
+                                mensagem,
+                                OffsetDateTime.now(),
+                                Map.of(parametro, mensagem));
 
                 return ResponseEntity.status(status).body(resposta);
         }

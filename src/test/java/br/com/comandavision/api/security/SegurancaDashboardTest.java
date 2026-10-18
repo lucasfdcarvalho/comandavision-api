@@ -116,4 +116,34 @@ public class SegurancaDashboardTest {
 
         verify(dashboardService).buscarResumo(inicio, fim);
     }
+
+    @Test
+    public void deveResponderRequisicaoInvalidaParaDataMalformada() throws Exception {
+        mockMvc.perform(get("/api/dashboard/resumo")
+                .param("inicio", "NaN-NaN-NaN")
+                .param("fim", "2026-08-31")
+                .with(jwt()
+                        .jwt(token -> token
+                                .subject("usuario-dono")
+                                .claim("user_role", "DONO"))
+                        .authorities(new SimpleGrantedAuthority("ROLE_DONO"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.mensagem").value("O parâmetro 'inicio' está em um formato inválido"));
+
+        verifyNoInteractions(dashboardService);
+    }
+
+    @Test
+    public void deveResponderRequisicaoInvalidaSemData() throws Exception {
+        mockMvc.perform(get("/api/dashboard/resumo")
+                .param("fim", "2026-08-31")
+                .with(jwt()
+                        .jwt(token -> token
+                                .subject("usuario-dono")
+                                .claim("user_role", "DONO"))
+                        .authorities(new SimpleGrantedAuthority("ROLE_DONO"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.mensagem").value("O parâmetro 'inicio' é obrigatório"));
+    }
 }
