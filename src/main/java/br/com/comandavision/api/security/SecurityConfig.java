@@ -29,6 +29,9 @@ public class SecurityConfig {
                                                 .permitAll()
                                                 .requestMatchers(HttpMethod.GET, "/health")
                                                 .permitAll()
+                                                // Avisos do Mercado Pago: sem login, validados pela assinatura x-signature.
+                                                .requestMatchers(HttpMethod.POST, "/webhooks/mercadopago")
+                                                .permitAll()
                                                 .requestMatchers("/api/dashboard/**", "/api/usuarios/**")
                                                 .hasRole("DONO")
                                                 .requestMatchers("/api/**")

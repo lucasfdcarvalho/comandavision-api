@@ -1,5 +1,7 @@
 package br.com.comandavision.api.pagamento;
 
+import br.com.comandavision.api.pix.CobrancaPixPendenteException;
+
 import java.math.BigDecimal;
 import java.util.List;
 
@@ -61,6 +63,16 @@ public class PagamentoService {
 
                 if (request.valor().compareTo(saldoRestante) > 0) {
                         throw new ValorPagamentoExcedeSaldoException(request.valor(), saldoRestante);
+                }
+
+                // Pix aguardando pagamento reserva parte do saldo: evita cobrar duas vezes o mesmo valor.
+                BigDecimal totalPendente = pagamentos.stream()
+                                .filter(pagamento -> pagamento.getStatus() == StatusPagamento.PENDENTE)
+                                .map(Pagamento::getValor)
+                                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+                if (request.valor().compareTo(saldoRestante.subtract(totalPendente)) > 0) {
+                        throw new CobrancaPixPendenteException(totalPendente);
                 }
 
                 Pagamento pagamento = new Pagamento(comanda, request.forma(), request.valor());

@@ -27,6 +27,7 @@ import br.com.comandavision.api.comanda.ItemComandaRepository;
 import br.com.comandavision.api.pagamento.dto.PagamentoResponse;
 import br.com.comandavision.api.pagamento.dto.RegistrarPagamentoRequest;
 import br.com.comandavision.api.pagamento.dto.ResumoFinanceiroResponse;
+import br.com.comandavision.api.pix.CobrancaPixPendenteException;
 import br.com.comandavision.api.produto.Produto;
 
 @ExtendWith(MockitoExtension.class)
@@ -99,6 +100,38 @@ public class PagamentoServiceTest {
                 .thenReturn(List.of(pagamentoExistente));
 
         assertThrows(ValorPagamentoExcedeSaldoException.class,
+                () -> pagamentoService.registrar(comandaId, request));
+
+        verify(pagamentoRepository, never())
+                .save(any(Pagamento.class));
+    }
+
+    @Test
+    public void naoDeveRegistrarValorReservadoPorPixPendente() {
+        Long comandaId = 10L;
+
+        Comanda comanda = new Comanda("Mesa 10", null);
+        comanda.fechar();
+
+        Produto produto = new Produto(new Categoria("Bebida", null), "Coca-cola", null, new BigDecimal("10.00"));
+        ItemComanda item = new ItemComanda(comanda, produto, 2, null);
+
+        // Pix de R$ 15 aguardando pagamento: sobram só R$ 5 para outras formas.
+        Pagamento pixPendente = new Pagamento(comanda, FormaPagamento.PIX, new BigDecimal("15.00"));
+
+        RegistrarPagamentoRequest request = new RegistrarPagamentoRequest(FormaPagamento.DINHEIRO,
+                new BigDecimal("6.00"), null);
+
+        when(comandaRepository.findById(comandaId))
+                .thenReturn(Optional.of(comanda));
+
+        when(itemComandaRepository.findByComandaIdOrderByCriadoEmAsc(comandaId))
+                .thenReturn(List.of(item));
+
+        when(pagamentoRepository.findByComandaIdOrderByCriadoEmAsc(comandaId))
+                .thenReturn(List.of(pixPendente));
+
+        assertThrows(CobrancaPixPendenteException.class,
                 () -> pagamentoService.registrar(comandaId, request));
 
         verify(pagamentoRepository, never())
