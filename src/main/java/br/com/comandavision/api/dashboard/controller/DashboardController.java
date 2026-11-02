@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import br.com.comandavision.api.dashboard.dto.FaturamentoDiarioResponse;
+import br.com.comandavision.api.dashboard.dto.ComandaEncerradaResponse;
 import br.com.comandavision.api.dashboard.dto.FormaPagamentoResumoResponse;
 import br.com.comandavision.api.dashboard.dto.ProdutoMaisVendidoResponse;
 import br.com.comandavision.api.dashboard.dto.ResumoDashboardResponse;
@@ -93,5 +94,21 @@ public class DashboardController {
             @Parameter(description = "Data final no formato AAAA-MM-DD", example = "2026-08-31", required = true) @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fim) {
 
         return dashboardService.buscarFaturamentoDiario(inicio, fim);
+    }
+
+    @Operation(
+            summary = "Consultar hist\u00f3rico gerencial de comandas",
+            description = "Retorna comandas fechadas e canceladas no per\u00edodo, com totais e indica\u00e7\u00e3o das vendas computadas nos indicadores")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Hist\u00f3rico retornado com sucesso"),
+            @ApiResponse(responseCode = "400", description = "Per\u00edodo informado \u00e9 inv\u00e1lido", content = @Content(schema = @Schema(implementation = ErroResponse.class)))
+    })
+    @GetMapping("/comandas")
+    public List<ComandaEncerradaResponse> buscarComandasEncerradas(
+            @Parameter(description = "Data inicial no formato AAAA-MM-DD", example = "2026-08-01", required = true) @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate inicio,
+
+            @Parameter(description = "Data final no formato AAAA-MM-DD", example = "2026-08-31", required = true) @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate fim) {
+
+        return dashboardService.buscarComandasEncerradas(inicio, fim);
     }
 }

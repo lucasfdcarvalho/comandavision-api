@@ -11,6 +11,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
+import java.util.List;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,8 +25,10 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import br.com.comandavision.api.dashboard.controller.DashboardController;
+import br.com.comandavision.api.dashboard.dto.ComandaEncerradaResponse;
 import br.com.comandavision.api.dashboard.dto.ResumoDashboardResponse;
 import br.com.comandavision.api.dashboard.service.DashboardService;
+import br.com.comandavision.api.comanda.StatusComanda;
 
 @WebMvcTest(DashboardController.class)
 @Import({
@@ -115,6 +119,43 @@ public class SegurancaDashboardTest {
                 .andExpect(jsonPath("$.quantidadeItensVendidos").value(50));
 
         verify(dashboardService).buscarResumo(inicio, fim);
+    }
+
+    @Test
+    public void devePermitirApenasAoDonoConsultarHistoricoGerencial() throws Exception {
+        LocalDate inicio = LocalDate.of(2026, 8, 1);
+        LocalDate fim = LocalDate.of(2026, 8, 31);
+        ComandaEncerradaResponse resposta = new ComandaEncerradaResponse(
+                42L,
+                "Mesa 12",
+                StatusComanda.FECHADA,
+                OffsetDateTime.parse("2026-08-18T21:30:00-03:00"),
+                new BigDecimal("128.50"),
+                new BigDecimal("128.50"),
+                true);
+        when(dashboardService.buscarComandasEncerradas(inicio, fim)).thenReturn(List.of(resposta));
+
+        mockMvc.perform(get("/api/dashboard/comandas")
+                .param("inicio", "2026-08-01")
+                .param("fim", "2026-08-31")
+                .with(jwt()
+                        .jwt(token -> token.subject("usuario-funcionario").claim("user_role", "FUNCIONARIO"))
+                        .authorities(new SimpleGrantedAuthority("ROLE_FUNCIONARIO"))))
+                .andExpect(status().isForbidden());
+
+        mockMvc.perform(get("/api/dashboard/comandas")
+                .param("inicio", "2026-08-01")
+                .param("fim", "2026-08-31")
+                .with(jwt()
+                        .jwt(token -> token.subject("usuario-dono").claim("user_role", "DONO"))
+                        .authorities(new SimpleGrantedAuthority("ROLE_DONO"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(42))
+                .andExpect(jsonPath("$[0].status").value("FECHADA"))
+                .andExpect(jsonPath("$[0].total").value(128.50))
+                .andExpect(jsonPath("$[0].computadaNosIndicadores").value(true));
+
+        verify(dashboardService).buscarComandasEncerradas(inicio, fim);
     }
 
     @Test

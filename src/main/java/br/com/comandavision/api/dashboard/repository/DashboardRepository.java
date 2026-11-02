@@ -9,6 +9,7 @@ import org.springframework.data.repository.Repository;
 import org.springframework.data.repository.query.Param;
 
 import br.com.comandavision.api.comanda.Comanda;
+import br.com.comandavision.api.dashboard.projection.ComandaEncerradaProjection;
 import br.com.comandavision.api.dashboard.projection.FaturamentoDiarioProjection;
 import br.com.comandavision.api.dashboard.projection.FormaPagamentoResumoProjection;
 import br.com.comandavision.api.dashboard.projection.ProdutoMaisVendidoProjection;
@@ -210,6 +211,51 @@ public interface DashboardRepository extends Repository<Comanda, Long> {
             ORDER BY d.data ASC
             """, nativeQuery = true)
     List<FaturamentoDiarioProjection> buscarFaturamentoDiario(
+            @Param("inicio") OffsetDateTime inicio,
+            @Param("fimExclusivo") OffsetDateTime fimExclusivo);
+
+    @Query(value = """
+            WITH totais_comanda AS (
+                SELECT
+                    c.id AS comanda_id,
+                    COALESCE(SUM(ic.preco_unitario * ic.quantidade), 0) AS total_comanda,
+                    COUNT(ic.id) AS quantidade_linhas
+                FROM comandavision.comandas c
+                LEFT JOIN comandavision.itens_comanda ic
+                    ON ic.comanda_id = c.id
+                WHERE c.status IN ('FECHADA', 'CANCELADA')
+                  AND c.fechada_em >= :inicio
+                  AND c.fechada_em < :fimExclusivo
+                GROUP BY c.id
+            ),
+            pagamentos_confirmados AS (
+                SELECT
+                    p.comanda_id,
+                    SUM(p.valor) AS total_pago
+                FROM comandavision.pagamentos p
+                WHERE p.status = 'CONFIRMADO'
+                GROUP BY p.comanda_id
+            )
+            SELECT
+                c.id AS "id",
+                c.identificacao AS "identificacao",
+                c.status AS "status",
+                c.fechada_em AS "encerradaEm",
+                tc.total_comanda AS "total",
+                COALESCE(pc.total_pago, 0) AS "totalPago",
+                (
+                    c.status = 'FECHADA'
+                    AND tc.quantidade_linhas > 0
+                    AND COALESCE(pc.total_pago, 0) >= tc.total_comanda
+                ) AS "computadaNosIndicadores"
+            FROM comandavision.comandas c
+            INNER JOIN totais_comanda tc
+                ON tc.comanda_id = c.id
+            LEFT JOIN pagamentos_confirmados pc
+                ON pc.comanda_id = c.id
+            ORDER BY c.fechada_em DESC, c.id DESC
+            """, nativeQuery = true)
+    List<ComandaEncerradaProjection> buscarComandasEncerradas(
             @Param("inicio") OffsetDateTime inicio,
             @Param("fimExclusivo") OffsetDateTime fimExclusivo);
 }

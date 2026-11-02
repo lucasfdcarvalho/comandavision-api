@@ -22,11 +22,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import br.com.comandavision.api.dashboard.LimiteDashboardInvalidoException;
 import br.com.comandavision.api.dashboard.PeriodoInvalidoException;
+import br.com.comandavision.api.dashboard.dto.ComandaEncerradaResponse;
 import br.com.comandavision.api.dashboard.dto.FaturamentoDiarioResponse;
 import br.com.comandavision.api.dashboard.dto.FormaPagamentoResumoResponse;
 import br.com.comandavision.api.dashboard.dto.ProdutoMaisVendidoResponse;
 import br.com.comandavision.api.dashboard.dto.ResumoDashboardResponse;
 import br.com.comandavision.api.dashboard.projection.FaturamentoDiarioProjection;
+import br.com.comandavision.api.dashboard.projection.ComandaEncerradaProjection;
 import br.com.comandavision.api.dashboard.projection.FormaPagamentoResumoProjection;
 import br.com.comandavision.api.dashboard.projection.ProdutoMaisVendidoProjection;
 import br.com.comandavision.api.dashboard.projection.ResumoDashboardProjection;
@@ -324,6 +326,39 @@ public class DashboardServiceTest {
         verify(dashboardRepository).buscarFaturamentoDiario(
                 inicioPeriodo,
                 fimExclusivo);
+    }
+
+    @Test
+    public void deveBuscarComandasEncerradasComOsMesmosCriteriosDosIndicadores() {
+        LocalDate inicio = LocalDate.of(2026, 8, 1);
+        LocalDate fim = LocalDate.of(2026, 8, 31);
+        OffsetDateTime inicioPeriodo = OffsetDateTime.parse("2026-08-01T00:00:00-03:00");
+        OffsetDateTime fimExclusivo = OffsetDateTime.parse("2026-09-01T00:00:00-03:00");
+
+        ComandaEncerradaProjection resultado = mock(ComandaEncerradaProjection.class);
+        OffsetDateTime encerradaEm = OffsetDateTime.parse("2026-08-18T21:30:00-03:00");
+        when(resultado.getId()).thenReturn(42L);
+        when(resultado.getIdentificacao()).thenReturn("Mesa 12");
+        when(resultado.getStatus()).thenReturn("FECHADA");
+        when(resultado.getEncerradaEm()).thenReturn(encerradaEm);
+        when(resultado.getTotal()).thenReturn(new BigDecimal("128.50"));
+        when(resultado.getTotalPago()).thenReturn(new BigDecimal("128.50"));
+        when(resultado.getComputadaNosIndicadores()).thenReturn(true);
+        when(dashboardRepository.buscarComandasEncerradas(inicioPeriodo, fimExclusivo))
+                .thenReturn(List.of(resultado));
+
+        List<ComandaEncerradaResponse> resposta = dashboardService.buscarComandasEncerradas(inicio, fim);
+
+        assertEquals(1, resposta.size());
+        assertEquals(42L, resposta.get(0).id());
+        assertEquals("Mesa 12", resposta.get(0).identificacao());
+        assertEquals("FECHADA", resposta.get(0).status().name());
+        assertEquals(encerradaEm, resposta.get(0).encerradaEm());
+        assertEquals(new BigDecimal("128.50"), resposta.get(0).total());
+        assertEquals(new BigDecimal("128.50"), resposta.get(0).totalPago());
+        assertEquals(true, resposta.get(0).computadaNosIndicadores());
+
+        verify(dashboardRepository).buscarComandasEncerradas(inicioPeriodo, fimExclusivo);
     }
 
 }

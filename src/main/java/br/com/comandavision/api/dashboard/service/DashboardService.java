@@ -12,6 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import br.com.comandavision.api.dashboard.LimiteDashboardInvalidoException;
 import br.com.comandavision.api.dashboard.PeriodoInvalidoException;
+import br.com.comandavision.api.dashboard.dto.ComandaEncerradaResponse;
 import br.com.comandavision.api.dashboard.dto.FaturamentoDiarioResponse;
 import br.com.comandavision.api.dashboard.dto.FormaPagamentoResumoResponse;
 import br.com.comandavision.api.dashboard.dto.ProdutoMaisVendidoResponse;
@@ -20,6 +21,7 @@ import br.com.comandavision.api.dashboard.projection.FaturamentoDiarioProjection
 import br.com.comandavision.api.dashboard.projection.FormaPagamentoResumoProjection;
 import br.com.comandavision.api.dashboard.projection.ResumoDashboardProjection;
 import br.com.comandavision.api.dashboard.repository.DashboardRepository;
+import br.com.comandavision.api.comanda.StatusComanda;
 import br.com.comandavision.api.pagamento.FormaPagamento;
 
 @Service
@@ -125,6 +127,26 @@ public class DashboardService {
                         resultado.getData(),
                         resultado.getFaturamento(),
                         resultado.getQuantidadeVendas()))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ComandaEncerradaResponse> buscarComandasEncerradas(LocalDate inicio, LocalDate fim) {
+        this.validarPeriodo(inicio, fim);
+
+        OffsetDateTime inicioPeriodo = this.converterInicio(inicio);
+        OffsetDateTime fimExclusivo = this.converterFimExclusivo(fim);
+
+        return dashboardRepository.buscarComandasEncerradas(inicioPeriodo, fimExclusivo)
+                .stream()
+                .map(resultado -> new ComandaEncerradaResponse(
+                        resultado.getId(),
+                        resultado.getIdentificacao(),
+                        StatusComanda.valueOf(resultado.getStatus()),
+                        resultado.getEncerradaEm(),
+                        resultado.getTotal(),
+                        resultado.getTotalPago(),
+                        Boolean.TRUE.equals(resultado.getComputadaNosIndicadores())))
                 .toList();
     }
 
