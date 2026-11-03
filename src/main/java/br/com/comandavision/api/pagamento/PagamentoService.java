@@ -4,6 +4,10 @@ import br.com.comandavision.api.pix.CobrancaPixPendenteException;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
+import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,32 +19,53 @@ import br.com.comandavision.api.comanda.ItemComanda;
 import br.com.comandavision.api.comanda.ItemComandaRepository;
 import br.com.comandavision.api.comanda.StatusComanda;
 import br.com.comandavision.api.pagamento.dto.PagamentoResponse;
+import br.com.comandavision.api.pagamento.dto.CorrigirPagamentoRequest;
 import br.com.comandavision.api.pagamento.dto.RegistrarPagamentoRequest;
 import br.com.comandavision.api.pagamento.dto.ResumoFinanceiroResponse;
+import br.com.comandavision.api.pix.CobrancaPixRepository;
 
 @Service
 public class PagamentoService {
         private final PagamentoRepository pagamentoRepository;
         private final ComandaRepository comandaRepository;
         private final ItemComandaRepository itemComandaRepository;
+        private final CobrancaPixRepository cobrancaPixRepository;
 
         public PagamentoService(
                         PagamentoRepository pagamentoRepository,
                         ComandaRepository comandaRepository,
-                        ItemComandaRepository itemComandaRepository) {
+                        ItemComandaRepository itemComandaRepository,
+                        CobrancaPixRepository cobrancaPixRepository) {
 
                 this.pagamentoRepository = pagamentoRepository;
                 this.comandaRepository = comandaRepository;
                 this.itemComandaRepository = itemComandaRepository;
+                this.cobrancaPixRepository = cobrancaPixRepository;
         }
 
         @Transactional
         public PagamentoResponse registrar(
                         Long comandaId,
-                        RegistrarPagamentoRequest request) {
+                        RegistrarPagamentoRequest request,
+                        String chaveIdempotencia) {
 
-                Comanda comanda = comandaRepository.findById(comandaId)
+                String chave = ChaveIdempotencia.validar(chaveIdempotencia);
+
+                Pagamento repetido = pagamentoRepository.findByChaveIdempotencia(chave).orElse(null);
+                if (repetido != null) {
+                        validarRepeticao(repetido, comandaId, request);
+                        return PagamentoResponse.from(repetido);
+                }
+
+                // Serializa o cálculo do saldo e a reserva/registro para a mesma comanda.
+                Comanda comanda = comandaRepository.findByIdForUpdate(comandaId)
                                 .orElseThrow(() -> new ComandaNaoEncontradaException(comandaId));
+
+                repetido = pagamentoRepository.findByChaveIdempotencia(chave).orElse(null);
+                if (repetido != null) {
+                        validarRepeticao(repetido, comandaId, request);
+                        return PagamentoResponse.from(repetido);
+                }
 
                 if (comanda.getStatus() != StatusComanda.FECHADA) {
                         throw new ComandaNaoPodeReceberPagamentoException(comandaId, comanda.getStatus());
@@ -75,11 +100,11 @@ public class PagamentoService {
                         throw new CobrancaPixPendenteException(totalPendente);
                 }
 
-                Pagamento pagamento = new Pagamento(comanda, request.forma(), request.valor());
+                Pagamento pagamento = new Pagamento(comanda, request.forma(), request.valor(), chave);
 
                 pagamento.confirmar(request.referenciaExterna());
 
-                Pagamento pagamentoSalvo = pagamentoRepository.save(pagamento);
+                Pagamento pagamentoSalvo = pagamentoRepository.saveAndFlush(pagamento);
 
                 return PagamentoResponse.from(pagamentoSalvo);
         }
@@ -98,14 +123,25 @@ public class PagamentoService {
         }
 
         @Transactional
-        public PagamentoResponse estornar(Long comandaId, Long pagamentoId) {
+        public PagamentoResponse corrigirRegistro(
+                        Long comandaId,
+                        Long pagamentoId,
+                        CorrigirPagamentoRequest request,
+                        UUID usuarioId) {
                 comandaRepository.findById(comandaId)
                                 .orElseThrow(() -> new ComandaNaoEncontradaException(comandaId));
 
-                Pagamento pagamento = pagamentoRepository.findByIdAndComandaId(pagamentoId, comandaId)
+                Pagamento pagamento = pagamentoRepository.findWithLockByIdAndComandaId(pagamentoId, comandaId)
                                 .orElseThrow(() -> new PagamentoNaoEncontradoException(pagamentoId, comandaId));
 
-                pagamento.estornar();
+                if (cobrancaPixRepository.existsByPagamentoId(pagamentoId)) {
+                        throw new OperacaoPagamentoInvalidaException(
+                                        "Uma cobrança Pix integrada não pode ser corrigida localmente. "
+                                                        + "Realize a devolução no Mercado Pago e aguarde a confirmação do provedor "
+                                                        + "antes de atualizar o estado no ComandaVision");
+                }
+
+                pagamento.corrigirRegistro(request.motivo(), usuarioId);
 
                 return PagamentoResponse.from(pagamento);
         }
@@ -115,8 +151,13 @@ public class PagamentoService {
                 comandaRepository.findById(comandaId)
                                 .orElseThrow(() -> new ComandaNaoEncontradaException(comandaId));
                 List<Pagamento> pagamentos = pagamentoRepository.findByComandaIdOrderByCriadoEmAsc(comandaId);
+                Set<Long> pagamentosPixIntegrados = cobrancaPixRepository.findPagamentoIdsByComandaId(comandaId)
+                                .stream()
+                                .collect(Collectors.toSet());
                 return pagamentos.stream()
-                                .map(PagamentoResponse::from)
+                                .map(pagamento -> PagamentoResponse.from(
+                                                pagamento,
+                                                pagamentosPixIntegrados.contains(pagamento.getId())))
                                 .toList();
         }
 
@@ -158,5 +199,19 @@ public class PagamentoService {
                                 totalPago,
                                 saldoRestante,
                                 situacao);
+        }
+
+        private static void validarRepeticao(
+                        Pagamento pagamento,
+                        Long comandaId,
+                        RegistrarPagamentoRequest request) {
+                boolean mesmaOperacao = Objects.equals(pagamento.getComanda().getId(), comandaId)
+                                && pagamento.getForma() == request.forma()
+                                && pagamento.getValor().compareTo(request.valor()) == 0
+                                && Objects.equals(pagamento.getReferenciaExterna(), request.referenciaExterna());
+
+                if (!mesmaOperacao) {
+                        throw new ChaveIdempotenciaEmConflitoException();
+                }
         }
 }

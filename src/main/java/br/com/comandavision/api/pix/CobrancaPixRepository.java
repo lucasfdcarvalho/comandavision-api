@@ -5,6 +5,8 @@ import java.util.Optional;
 
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import br.com.comandavision.api.pagamento.StatusPagamento;
 
@@ -13,6 +15,12 @@ import br.com.comandavision.api.pagamento.StatusPagamento;
 public interface CobrancaPixRepository extends JpaRepository<CobrancaPix, Long> {
     @EntityGraph(attributePaths = { "pagamento", "pagamento.comanda" })
     Optional<CobrancaPix> findByPagamentoId(Long pagamentoId);
+
+    boolean existsByPagamentoId(Long pagamentoId);
+
+    @Query("select cobranca.pagamento.id from CobrancaPix cobranca "
+            + "where cobranca.pagamento.comanda.id = :comandaId")
+    List<Long> findPagamentoIdsByComandaId(@Param("comandaId") Long comandaId);
 
     @EntityGraph(attributePaths = { "pagamento", "pagamento.comanda" })
     Optional<CobrancaPix> findByPedidoMercadoPago(String pedidoMercadoPago);

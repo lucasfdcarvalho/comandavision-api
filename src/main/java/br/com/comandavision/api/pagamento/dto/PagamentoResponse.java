@@ -16,10 +16,17 @@ public record PagamentoResponse(
         @Schema(description = "Situação atual do pagamento") StatusPagamento status,
         @Schema(description = "Valor pago", example = "50.00") BigDecimal valor,
         @Schema(description = "Referência externa do pagamento", example = "TXID-PIX-12345") String referenciaExterna,
+        @Schema(description = "Indica se o pagamento possui cobrança Pix vinculada ao provedor") boolean pixIntegrado,
+        @Schema(description = "Motivo da correção manual do registro") String motivoCorrecao,
+        @Schema(description = "Data e hora da correção manual", accessMode = Schema.AccessMode.READ_ONLY) OffsetDateTime corrigidoEm,
         @Schema(description = "Data e hora do pagamento", example = "2026-08-29T20:00:00-03:00", accessMode = Schema.AccessMode.READ_ONLY) OffsetDateTime pagoEm,
         @Schema(description = "Data e hora de criação", example = "2026-08-29T20:00:00-03:00", accessMode = Schema.AccessMode.READ_ONLY) OffsetDateTime criadoEm,
         @Schema(description = "Data e hora de atualização", example = "2026-08-29T20:00:00-03:00", accessMode = Schema.AccessMode.READ_ONLY) OffsetDateTime atualizadoEm) {
     public static PagamentoResponse from(Pagamento pagamento) {
+        return from(pagamento, false);
+    }
+
+    public static PagamentoResponse from(Pagamento pagamento, boolean pixIntegrado) {
         return new PagamentoResponse(
                 pagamento.getId(),
                 pagamento.getComanda().getId(),
@@ -27,6 +34,9 @@ public record PagamentoResponse(
                 pagamento.getStatus(),
                 pagamento.getValor(),
                 pagamento.getReferenciaExterna(),
+                pixIntegrado,
+                pagamento.getMotivoCorrecao(),
+                pagamento.getCorrigidoEm(),
                 pagamento.getPagoEm(),
                 pagamento.getCriadoEm(),
                 pagamento.getAtualizadoEm());

@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -13,6 +14,7 @@ import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,6 +33,7 @@ import br.com.comandavision.api.comanda.ComandaRepository;
 import br.com.comandavision.api.comanda.ItemComanda;
 import br.com.comandavision.api.comanda.ItemComandaRepository;
 import br.com.comandavision.api.pagamento.ComandaNaoPodeReceberPagamentoException;
+import br.com.comandavision.api.pagamento.ChaveIdempotenciaEmConflitoException;
 import br.com.comandavision.api.pagamento.FormaPagamento;
 import br.com.comandavision.api.pagamento.OperacaoPagamentoInvalidaException;
 import br.com.comandavision.api.pagamento.Pagamento;
@@ -47,6 +50,7 @@ import br.com.comandavision.api.produto.Produto;
 public class PixServiceTest {
     private static final Long COMANDA_ID = 10L;
     private static final String PEDIDO_ID = "ORD01TESTE";
+    private static final String CHAVE = "e1f0aebf-59c5-4da2-ac39-b2628f896f7b";
 
     @Mock
     private MercadoPagoClient mercadoPagoClient;
@@ -64,6 +68,7 @@ public class PixServiceTest {
 
     private PixService pixService;
     private Comanda comanda;
+    private Pagamento ultimoPagamentoSalvo;
 
     @BeforeEach
     public void preparar() {
@@ -76,15 +81,19 @@ public class PixServiceTest {
 
         Produto produto = new Produto(new Categoria("Bebidas", null), "Suco", null, new BigDecimal("25.00"));
         when(comandaRepository.findById(COMANDA_ID)).thenReturn(Optional.of(comanda));
+        when(comandaRepository.findByIdForUpdate(COMANDA_ID)).thenReturn(Optional.of(comanda));
         when(itemComandaRepository.findByComandaIdOrderByCriadoEmAsc(COMANDA_ID))
                 .thenReturn(List.of(new ItemComanda(comanda, produto, 4, null)));
         when(mercadoPagoClient.estaConfigurado()).thenReturn(true);
-        when(pagamentoRepository.save(any(Pagamento.class))).thenAnswer(chamada -> {
+        when(pagamentoRepository.saveAndFlush(any(Pagamento.class))).thenAnswer(chamada -> {
             Pagamento pagamento = chamada.getArgument(0);
             ReflectionTestUtils.setField(pagamento, "id", 1L);
+            ultimoPagamentoSalvo = pagamento;
             return pagamento;
         });
-        when(cobrancaPixRepository.save(any(CobrancaPix.class))).thenAnswer(chamada -> chamada.getArgument(0));
+        when(pagamentoRepository.findWithLockById(1L))
+                .thenAnswer(chamada -> Optional.ofNullable(ultimoPagamentoSalvo));
+        when(cobrancaPixRepository.saveAndFlush(any(CobrancaPix.class))).thenAnswer(chamada -> chamada.getArgument(0));
     }
 
     private static PedidoMercadoPago pedido(String status) {
@@ -100,18 +109,19 @@ public class PixServiceTest {
     }
 
     private CobrancaPix cobranca(Pagamento pagamento, OffsetDateTime expiraEm) {
+        ultimoPagamentoSalvo = pagamento;
         CobrancaPix cobranca = new CobrancaPix(pagamento, PEDIDO_ID, "00020126", "iVBOR", expiraEm);
         when(cobrancaPixRepository.findByPagamentoId(1L)).thenReturn(Optional.of(cobranca));
-        when(pagamentoRepository.findById(1L)).thenReturn(Optional.of(pagamento));
+        when(pagamentoRepository.findWithLockById(1L)).thenReturn(Optional.of(pagamento));
         return cobranca;
     }
 
     @Test
     public void deveGerarPixPendenteComQrCode() {
-        when(mercadoPagoClient.criarPedidoPix(eq(new BigDecimal("40.00")), anyString(), eq("PT30M")))
+        when(mercadoPagoClient.criarPedidoPix(eq(new BigDecimal("40.00")), anyString(), eq("PT30M"), eq(CHAVE)))
                 .thenReturn(pedido("action_required"));
 
-        CobrancaPixResponse resposta = pixService.gerar(COMANDA_ID, new BigDecimal("40.00"));
+        CobrancaPixResponse resposta = pixService.gerar(COMANDA_ID, new BigDecimal("40.00"), CHAVE);
 
         assertEquals(StatusPagamento.PENDENTE, resposta.status());
         assertEquals("00020126580014br.gov.bcb.pix", resposta.qrCode());
@@ -125,15 +135,15 @@ public class PixServiceTest {
         when(comandaRepository.findById(COMANDA_ID)).thenReturn(Optional.of(aberta));
 
         assertThrows(ComandaNaoPodeReceberPagamentoException.class,
-                () -> pixService.gerar(COMANDA_ID, new BigDecimal("10.00")));
+                () -> pixService.gerar(COMANDA_ID, new BigDecimal("10.00"), CHAVE));
 
-        verify(mercadoPagoClient, never()).criarPedidoPix(any(), anyString(), anyString());
+        verify(mercadoPagoClient, never()).criarPedidoPix(any(), anyString(), anyString(), anyString());
     }
 
     @Test
     public void naoDeveGerarPixAcimaDoSaldo() {
         assertThrows(ValorPagamentoExcedeSaldoException.class,
-                () -> pixService.gerar(COMANDA_ID, new BigDecimal("100.01")));
+                () -> pixService.gerar(COMANDA_ID, new BigDecimal("100.01"), CHAVE));
     }
 
     @Test
@@ -142,27 +152,105 @@ public class PixServiceTest {
                 .thenReturn(List.of(pagamentoPendente("80.00")));
 
         assertThrows(CobrancaPixPendenteException.class,
-                () -> pixService.gerar(COMANDA_ID, new BigDecimal("30.00")));
+                () -> pixService.gerar(COMANDA_ID, new BigDecimal("30.00"), CHAVE));
 
-        verify(mercadoPagoClient, never()).criarPedidoPix(any(), anyString(), anyString());
+        verify(mercadoPagoClient, never()).criarPedidoPix(any(), anyString(), anyString(), anyString());
     }
 
     @Test
     public void deveInformarQuandoPixNaoEstaConfigurado() {
         when(mercadoPagoClient.estaConfigurado()).thenReturn(false);
 
-        assertThrows(PixIndisponivelException.class, () -> pixService.gerar(COMANDA_ID, new BigDecimal("10.00")));
+        assertThrows(PixIndisponivelException.class,
+                () -> pixService.gerar(COMANDA_ID, new BigDecimal("10.00"), CHAVE));
     }
 
     @Test
-    public void deveCancelarNoMercadoPagoSeNaoConseguirSalvar() {
-        when(mercadoPagoClient.criarPedidoPix(any(), anyString(), anyString())).thenReturn(pedido("action_required"));
-        when(cobrancaPixRepository.save(any(CobrancaPix.class))).thenThrow(new DataIntegrityViolationException("falha"));
+    public void deveManterReservaParaReconciliarSeNaoConseguirSalvar() {
+        when(mercadoPagoClient.criarPedidoPix(any(), anyString(), anyString(), anyString()))
+                .thenReturn(pedido("action_required"));
+        when(cobrancaPixRepository.saveAndFlush(any(CobrancaPix.class)))
+                .thenThrow(new DataIntegrityViolationException("falha"));
 
-        assertThrows(DataIntegrityViolationException.class,
-                () -> pixService.gerar(COMANDA_ID, new BigDecimal("10.00")));
+        assertThrows(FalhaMercadoPagoException.class,
+                () -> pixService.gerar(COMANDA_ID, new BigDecimal("10.00"), CHAVE));
 
-        verify(mercadoPagoClient).cancelarPedido(PEDIDO_ID);
+        verify(mercadoPagoClient, never()).cancelarPedido(PEDIDO_ID);
+    }
+
+    @Test
+    public void deveRepetirMesmaChaveSemCriarOutroPedido() {
+        Pagamento pagamento = new Pagamento(comanda, FormaPagamento.PIX, new BigDecimal("40.00"), CHAVE);
+        ReflectionTestUtils.setField(pagamento, "id", 1L);
+        CobrancaPix cobranca = new CobrancaPix(
+                pagamento,
+                PEDIDO_ID,
+                "00020126580014br.gov.bcb.pix",
+                "iVBORw0KGgo=",
+                OffsetDateTime.now().plusMinutes(20));
+        when(pagamentoRepository.findByChaveIdempotencia(CHAVE)).thenReturn(Optional.of(pagamento));
+        when(cobrancaPixRepository.findByPagamentoId(1L)).thenReturn(Optional.of(cobranca));
+
+        CobrancaPixResponse resposta = pixService.gerar(COMANDA_ID, new BigDecimal("40.00"), CHAVE);
+
+        assertEquals(PEDIDO_ID, cobranca.getPedidoMercadoPago());
+        assertEquals(StatusPagamento.PENDENTE, resposta.status());
+        verify(mercadoPagoClient, never()).criarPedidoPix(any(), anyString(), anyString(), anyString());
+        verify(mercadoPagoClient, never()).buscarPedidoPorReferencia(anyString(), any(), any());
+    }
+
+    @Test
+    public void deveRecusarMesmaChaveComValorDiferente() {
+        Pagamento pagamento = new Pagamento(comanda, FormaPagamento.PIX, new BigDecimal("40.00"), CHAVE);
+        ReflectionTestUtils.setField(pagamento, "id", 1L);
+        when(pagamentoRepository.findByChaveIdempotencia(CHAVE)).thenReturn(Optional.of(pagamento));
+
+        assertThrows(ChaveIdempotenciaEmConflitoException.class,
+                () -> pixService.gerar(COMANDA_ID, new BigDecimal("41.00"), CHAVE));
+
+        verify(mercadoPagoClient, never()).criarPedidoPix(any(), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    public void deveReconciliarResultadoIncertoSemCriarSegundoPedido() {
+        AtomicReference<Pagamento> reserva = new AtomicReference<>();
+        when(pagamentoRepository.findByChaveIdempotencia(CHAVE))
+                .thenAnswer(chamada -> Optional.ofNullable(reserva.get()));
+        when(pagamentoRepository.saveAndFlush(any(Pagamento.class))).thenAnswer(chamada -> {
+            Pagamento pagamento = chamada.getArgument(0);
+            ReflectionTestUtils.setField(pagamento, "id", 1L);
+            reserva.set(pagamento);
+            ultimoPagamentoSalvo = pagamento;
+            return pagamento;
+        });
+        when(mercadoPagoClient.criarPedidoPix(any(), anyString(), anyString(), eq(CHAVE)))
+                .thenThrow(new FalhaMercadoPagoException("resultado incerto", null, true));
+        when(mercadoPagoClient.buscarPedidoPorReferencia(anyString(), any(), any()))
+                .thenReturn(null, pedido("action_required"));
+
+        assertThrows(FalhaMercadoPagoException.class,
+                () -> pixService.gerar(COMANDA_ID, new BigDecimal("40.00"), CHAVE));
+
+        CobrancaPixResponse resposta = pixService.gerar(COMANDA_ID, new BigDecimal("40.00"), CHAVE);
+
+        assertEquals(StatusPagamento.PENDENTE, resposta.status());
+        verify(mercadoPagoClient, times(1)).criarPedidoPix(any(), anyString(), anyString(), eq(CHAVE));
+        verify(mercadoPagoClient, times(2)).buscarPedidoPorReferencia(anyString(), any(), any());
+        verify(pagamentoRepository, times(1)).saveAndFlush(any(Pagamento.class));
+    }
+
+    @Test
+    public void deveLiberarReservaQuandoProvedorRecusaSemCriarPedido() {
+        when(mercadoPagoClient.criarPedidoPix(any(), anyString(), anyString(), eq(CHAVE)))
+                .thenThrow(new FalhaMercadoPagoException("requisição recusada", null, false));
+
+        FalhaMercadoPagoException erro = assertThrows(
+                FalhaMercadoPagoException.class,
+                () -> pixService.gerar(COMANDA_ID, new BigDecimal("40.00"), CHAVE));
+
+        assertEquals(false, erro.resultadoIncerto());
+        verify(pagamentoRepository).delete(ultimoPagamentoSalvo);
+        verify(mercadoPagoClient, never()).buscarPedidoPorReferencia(anyString(), any(), any());
     }
 
     @Test
@@ -224,6 +312,22 @@ public class PixServiceTest {
 
         assertThrows(OperacaoPagamentoInvalidaException.class, () -> pixService.cancelar(COMANDA_ID, 1L));
         assertEquals(StatusPagamento.CONFIRMADO, pagamento.getStatus());
+    }
+
+    @Test
+    public void deveAtualizarSomenteDepoisQueProvedorConfirmaDevolucao() {
+        Pagamento pagamento = pagamentoPendente("40.00");
+        pagamento.confirmar(PEDIDO_ID);
+        CobrancaPix cobranca = cobranca(pagamento, OffsetDateTime.now().plusMinutes(20));
+        when(cobrancaPixRepository.findByPedidoMercadoPago(PEDIDO_ID)).thenReturn(Optional.of(cobranca));
+        when(mercadoPagoClient.buscarPedido(PEDIDO_ID)).thenReturn(pedido("refunded"));
+
+        pixService.processarNotificacao(PEDIDO_ID);
+
+        assertEquals(StatusPagamento.ESTORNADO, pagamento.getStatus());
+        assertEquals(null, pagamento.getMotivoCorrecao());
+        assertEquals(null, pagamento.getCorrigidoPor());
+        assertEquals(null, pagamento.getCorrigidoEm());
     }
 
     @Test

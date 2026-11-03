@@ -53,7 +53,9 @@ class ComandaAberturaPostgresTest {
 
     @BeforeEach
     void preparar() throws Exception {
-        executar("TRUNCATE comandavision.itens_comanda, comandavision.comandas, comandavision.produtos, comandavision.categorias RESTART IDENTITY");
+        executar("TRUNCATE comandavision.cobrancas_pix, comandavision.pagamentos, "
+                + "comandavision.itens_comanda, comandavision.comandas, "
+                + "comandavision.produtos, comandavision.categorias RESTART IDENTITY");
         mvc = MockMvcBuilders.standaloneSetup(new ComandaController(service))
                 .setControllerAdvice(new GlobalExceptionHandler()).build();
     }
@@ -222,7 +224,7 @@ class ComandaAberturaPostgresTest {
                 comando.execute("DROP SCHEMA IF EXISTS comandavision CASCADE");
                 for (String migration : List.of("V1__criar_schema_comandavision.sql",
                         "V2__criar_tabelas_categorias_e_produtos.sql", "V3__criar_tabelas_comandas_e_itens.sql",
-                        "V7__adicionar_imagem_url_em_produtos.sql")) {
+                        "V4__criar_tabela_pagamentos.sql", "V7__adicionar_imagem_url_em_produtos.sql")) {
                     executarRecurso(conexao, migration);
                 }
                 conexao.commit();

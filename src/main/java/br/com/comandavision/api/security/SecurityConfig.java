@@ -34,6 +34,10 @@ public class SecurityConfig {
                                                 .permitAll()
                                                 .requestMatchers("/api/dashboard/**", "/api/usuarios/**")
                                                 .hasRole("DONO")
+                                                .requestMatchers(HttpMethod.PATCH,
+                                                                "/api/comandas/*/pagamentos/*/corrigir",
+                                                                "/api/comandas/*/pagamentos/*/estornar")
+                                                .hasAnyRole("DONO", "FUNCIONARIO")
                                                 .requestMatchers("/api/**")
                                                 .hasAnyRole("DONO", "FUNCIONARIO")
                                                 .requestMatchers("/error")

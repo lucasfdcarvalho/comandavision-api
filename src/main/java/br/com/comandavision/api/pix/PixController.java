@@ -6,6 +6,7 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -45,8 +46,11 @@ public class PixController {
     })
     @PostMapping("/pix")
     @ResponseStatus(HttpStatus.CREATED)
-    public CobrancaPixResponse gerar(@PathVariable Long comandaId, @Valid @RequestBody GerarPixRequest request) {
-        return pixService.gerar(comandaId, request.valor());
+    public CobrancaPixResponse gerar(
+            @PathVariable Long comandaId,
+            @RequestHeader(name = "Idempotency-Key") String chaveIdempotencia,
+            @Valid @RequestBody GerarPixRequest request) {
+        return pixService.gerar(comandaId, request.valor(), chaveIdempotencia);
     }
 
     @Operation(summary = "Consultar Pix", description = "Confere no Mercado Pago se o Pix foi pago e devolve a situação atual")

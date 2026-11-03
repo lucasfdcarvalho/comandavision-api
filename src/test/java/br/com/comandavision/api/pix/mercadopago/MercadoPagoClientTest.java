@@ -11,7 +11,9 @@ import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.time.OffsetDateTime;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Function;
 
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,6 +28,7 @@ import br.com.comandavision.api.pix.PixIndisponivelException;
 // Servidor HTTP local no lugar do Mercado Pago: confere o que o cliente envia e se ele
 // entende a resposta no formato documentado da API de Orders.
 public class MercadoPagoClientTest {
+    private static final String CHAVE = "2dad9831-70a9-4dc7-b75b-ec2cd6808bed";
     private static final String RESPOSTA_PEDIDO = """
             {"id":"ORD01HRYFWNYRE1MR1E60MW3X0T2P","type":"online","total_amount":"50.00",
              "status":"action_required","status_detail":"waiting_transfer",
@@ -42,14 +45,16 @@ public class MercadoPagoClientTest {
     private final AtomicReference<HttpExchange> requisicaoRecebida = new AtomicReference<>();
     private volatile int statusResposta = 201;
     private volatile String respostaAtual = RESPOSTA_PEDIDO;
+    private Function<HttpExchange, String> respostaDinamica;
 
     @BeforeEach
     public void iniciar() throws IOException {
+        respostaDinamica = troca -> respostaAtual;
         servidor = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         servidor.createContext("/", troca -> {
             requisicaoRecebida.set(troca);
             corpoRecebido.set(new String(troca.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
-            byte[] resposta = respostaAtual.getBytes(StandardCharsets.UTF_8);
+            byte[] resposta = respostaDinamica.apply(troca).getBytes(StandardCharsets.UTF_8);
             troca.getResponseHeaders().add("Content-Type", "application/json");
             troca.sendResponseHeaders(statusResposta, resposta.length);
             try (OutputStream saida = troca.getResponseBody()) {
@@ -71,13 +76,14 @@ public class MercadoPagoClientTest {
 
     @Test
     public void deveCriarPedidoPixNoFormatoDaApiDeOrders() {
-        PedidoMercadoPago pedido = cliente(true, "").criarPedidoPix(new BigDecimal("50"), "comanda-10-abc", "PT30M");
+        PedidoMercadoPago pedido = cliente(true, "").criarPedidoPix(
+                new BigDecimal("50"), "comanda-10-abc", "PT30M", CHAVE);
 
         HttpExchange requisicao = requisicaoRecebida.get();
         assertEquals("POST", requisicao.getRequestMethod());
         assertEquals("/v1/orders", requisicao.getRequestURI().getPath());
         assertEquals("Bearer APP_USR-token-de-teste", requisicao.getRequestHeaders().getFirst("Authorization"));
-        assertNotNull(requisicao.getRequestHeaders().getFirst("X-Idempotency-Key"));
+        assertEquals(CHAVE, requisicao.getRequestHeaders().getFirst("X-Idempotency-Key"));
 
         String corpo = corpoRecebido.get();
         assertTrue(corpo.contains("\"total_amount\":\"50.00\""), corpo);
@@ -98,7 +104,8 @@ public class MercadoPagoClientTest {
 
     @Test
     public void deveUsarEmailDoEstabelecimentoEmProducao() {
-        cliente(false, "contato@supri.com.br").criarPedidoPix(new BigDecimal("12.5"), "ref", "PT30M");
+        cliente(false, "contato@supri.com.br").criarPedidoPix(
+                new BigDecimal("12.5"), "ref", "PT30M", CHAVE);
 
         String corpo = corpoRecebido.get();
         assertTrue(corpo.contains("\"email\":\"contato@supri.com.br\""), corpo);
@@ -112,7 +119,7 @@ public class MercadoPagoClientTest {
 
         assertFalse(cliente.estaConfigurado());
         assertThrows(PixIndisponivelException.class,
-                () -> cliente.criarPedidoPix(BigDecimal.TEN, "ref", "PT30M"));
+                () -> cliente.criarPedidoPix(BigDecimal.TEN, "ref", "PT30M", CHAVE));
     }
 
     @Test
@@ -124,6 +131,28 @@ public class MercadoPagoClientTest {
 
         assertEquals("/v1/orders/ORD1", requisicaoRecebida.get().getRequestURI().getPath());
         assertTrue(pedido.foiPago());
+    }
+
+    @Test
+    public void deveReconciliarPedidoPelaReferenciaExterna() {
+        AtomicReference<String> consulta = new AtomicReference<>();
+        respostaDinamica = troca -> {
+            if ("/v1/orders".equals(troca.getRequestURI().getPath())) {
+                consulta.set(troca.getRequestURI().getRawQuery());
+                return "{\"data\":[{\"id\":\"ORD1\"}]}";
+            }
+            return RESPOSTA_PEDIDO;
+        };
+
+        PedidoMercadoPago pedido = cliente(true, "").buscarPedidoPorReferencia(
+                "cv-10-abc",
+                OffsetDateTime.parse("2026-11-02T10:00:00-03:00"),
+                OffsetDateTime.parse("2026-11-02T11:00:00-03:00"));
+
+        assertTrue(consulta.get().contains("external_reference=cv-10-abc"), consulta.get());
+        assertTrue(consulta.get().contains("begin_date="), consulta.get());
+        assertEquals("/v1/orders/ORD1", requisicaoRecebida.get().getRequestURI().getPath());
+        assertEquals("ORD01HRYFWNYRE1MR1E60MW3X0T2P", pedido.id());
     }
 
     @Test
@@ -141,7 +170,8 @@ public class MercadoPagoClientTest {
         statusResposta = 400;
         respostaAtual = "{\"errors\":[{\"code\":\"invalid_total_amount\"}]}";
 
-        assertThrows(FalhaMercadoPagoException.class,
-                () -> cliente(true, "").criarPedidoPix(BigDecimal.ONE, "ref", "PT30M"));
+        FalhaMercadoPagoException erro = assertThrows(FalhaMercadoPagoException.class,
+                () -> cliente(true, "").criarPedidoPix(BigDecimal.ONE, "ref", "PT30M", CHAVE));
+        assertFalse(erro.resultadoIncerto());
     }
 }

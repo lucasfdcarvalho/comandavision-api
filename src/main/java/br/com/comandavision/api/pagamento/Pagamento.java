@@ -2,6 +2,7 @@ package br.com.comandavision.api.pagamento;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.UUID;
 
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
@@ -45,8 +46,20 @@ public class Pagamento {
     @Column(name = "referencia_externa", length = 255)
     private String referenciaExterna;
 
+    @Column(name = "chave_idempotencia", length = 128)
+    private String chaveIdempotencia;
+
     @Column(name = "pago_em")
     private OffsetDateTime pagoEm;
+
+    @Column(name = "motivo_correcao", length = 500)
+    private String motivoCorrecao;
+
+    @Column(name = "corrigido_por")
+    private UUID corrigidoPor;
+
+    @Column(name = "corrigido_em")
+    private OffsetDateTime corrigidoEm;
 
     @CreationTimestamp
     @Column(name = "criado_em", nullable = false, updatable = false)
@@ -60,9 +73,14 @@ public class Pagamento {
     }
 
     public Pagamento(Comanda comanda, FormaPagamento forma, BigDecimal valor) {
+        this(comanda, forma, valor, null);
+    }
+
+    public Pagamento(Comanda comanda, FormaPagamento forma, BigDecimal valor, String chaveIdempotencia) {
         this.comanda = comanda;
         this.forma = forma;
         this.valor = valor;
+        this.chaveIdempotencia = chaveIdempotencia;
     }
 
     public Long getId() {
@@ -89,8 +107,24 @@ public class Pagamento {
         return this.referenciaExterna;
     }
 
+    public String getChaveIdempotencia() {
+        return this.chaveIdempotencia;
+    }
+
     public OffsetDateTime getPagoEm() {
         return this.pagoEm;
+    }
+
+    public String getMotivoCorrecao() {
+        return this.motivoCorrecao;
+    }
+
+    public UUID getCorrigidoPor() {
+        return this.corrigidoPor;
+    }
+
+    public OffsetDateTime getCorrigidoEm() {
+        return this.corrigidoEm;
     }
 
     public OffsetDateTime getCriadoEm() {
@@ -121,10 +155,26 @@ public class Pagamento {
         this.status = StatusPagamento.CANCELADO;
     }
 
-    public void estornar() {
+    public void corrigirRegistro(String motivo, UUID usuarioId) {
         if (this.status != StatusPagamento.CONFIRMADO) {
             throw new OperacaoPagamentoInvalidaException(
-                    "Somente um pagamento confirmado pode ser estornado");
+                    "Somente um pagamento confirmado pode ser corrigido");
+        }
+        if (motivo == null || motivo.isBlank() || usuarioId == null) {
+            throw new OperacaoPagamentoInvalidaException(
+                    "Informe o motivo e o usuário responsável pela correção");
+        }
+
+        this.status = StatusPagamento.ESTORNADO;
+        this.motivoCorrecao = motivo.trim();
+        this.corrigidoPor = usuarioId;
+        this.corrigidoEm = OffsetDateTime.now();
+    }
+
+    public void confirmarDevolucaoPeloProvedor() {
+        if (this.status != StatusPagamento.CONFIRMADO) {
+            throw new OperacaoPagamentoInvalidaException(
+                    "Somente um pagamento confirmado pode receber a devolução do provedor");
         }
 
         this.status = StatusPagamento.ESTORNADO;

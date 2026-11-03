@@ -2,6 +2,7 @@ package br.com.comandavision.api.pix.mercadopago;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -56,7 +57,11 @@ public class MercadoPagoClient {
         return configurado;
     }
 
-    public PedidoMercadoPago criarPedidoPix(BigDecimal valor, String referenciaExterna, String duracaoExpiracao) {
+    public PedidoMercadoPago criarPedidoPix(
+            BigDecimal valor,
+            String referenciaExterna,
+            String duracaoExpiracao,
+            String chaveIdempotencia) {
         verificarConfiguracao();
 
         String valorTexto = valor.setScale(2, RoundingMode.HALF_UP).toPlainString();
@@ -79,15 +84,58 @@ public class MercadoPagoClient {
             return restClient.post()
                     .uri("/v1/orders")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .header("X-Idempotency-Key", UUID.randomUUID().toString())
+                    .header("X-Idempotency-Key", chaveIdempotencia)
                     .body(corpo)
                     .retrieve()
                     .body(PedidoMercadoPago.class);
         } catch (RestClientResponseException exception) {
+            int status = exception.getStatusCode().value();
+            if (status >= 400 && status < 500 && status != 409 && status != 423 && status != 429) {
+                throw new FalhaMercadoPagoException(
+                        "O Mercado Pago recusou a criação do Pix. Revise a configuração antes de tentar novamente",
+                        exception,
+                        false);
+            }
             LOGGER.error("Mercado Pago recusou a criação do Pix: {} {}", exception.getStatusCode(), exception.getResponseBodyAsString());
             throw new FalhaMercadoPagoException("O Mercado Pago não conseguiu gerar o Pix. Tente novamente", exception);
         } catch (RestClientException exception) {
             throw new FalhaMercadoPagoException("Não foi possível falar com o Mercado Pago. Tente novamente", exception);
+        }
+    }
+
+    public PedidoMercadoPago buscarPedidoPorReferencia(
+            String referenciaExterna,
+            OffsetDateTime inicio,
+            OffsetDateTime fim) {
+        verificarConfiguracao();
+
+        try {
+            BuscaPedidosMercadoPago resposta = restClient.get()
+                    .uri(construtor -> construtor
+                            .path("/v1/orders")
+                            .queryParam("begin_date", inicio.toString())
+                            .queryParam("end_date", fim.toString())
+                            .queryParam("external_reference", referenciaExterna)
+                            .queryParam("type", "online")
+                            .queryParam("page", 1)
+                            .queryParam("page_size", 2)
+                            .build())
+                    .retrieve()
+                    .body(BuscaPedidosMercadoPago.class);
+
+            if (resposta == null || resposta.data() == null || resposta.data().isEmpty()) {
+                return null;
+            }
+
+            // A busca reconcilia o ID; a consulta por ID devolve os dados completos do QR Code.
+            return buscarPedido(resposta.data().getFirst().id());
+        } catch (FalhaMercadoPagoException exception) {
+            throw exception;
+        } catch (RestClientException exception) {
+            throw new FalhaMercadoPagoException(
+                    "Não foi possível reconciliar a tentativa de Pix no Mercado Pago",
+                    exception,
+                    true);
         }
     }
 

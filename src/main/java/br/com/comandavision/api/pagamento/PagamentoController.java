@@ -1,8 +1,11 @@
 package br.com.comandavision.api.pagamento;
 
 import java.util.List;
+import java.util.UUID;
 
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import br.com.comandavision.api.exception.ErroResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -15,11 +18,13 @@ import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import br.com.comandavision.api.pagamento.dto.PagamentoResponse;
+import br.com.comandavision.api.pagamento.dto.CorrigirPagamentoRequest;
 import br.com.comandavision.api.pagamento.dto.RegistrarPagamentoRequest;
 import br.com.comandavision.api.pagamento.dto.ResumoFinanceiroResponse;
 import jakarta.validation.Valid;
@@ -47,8 +52,9 @@ public class PagamentoController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public PagamentoResponse registrar(@PathVariable Long comandaId,
+            @RequestHeader(name = "Idempotency-Key") String chaveIdempotencia,
             @Valid @RequestBody RegistrarPagamentoRequest request) {
-        return pagamentoService.registrar(comandaId, request);
+        return pagamentoService.registrar(comandaId, request, chaveIdempotencia);
     }
 
     @Operation(summary = "Listar pagamentos", description = "Retorna os pagamentos registrados para uma comanda")
@@ -61,16 +67,23 @@ public class PagamentoController {
         return pagamentoService.listar(comandaId);
     }
 
-    @Operation(summary = "Estornar pagamento", description = "Estorna um pagamento registrado na comanda")
+    @Operation(summary = "Corrigir pagamento manual", description = "Anula um registro manual incorreto sem movimentar dinheiro")
     @ApiResponses({
-            @ApiResponse(responseCode = "200", description = "Pagamento estornado com sucesso"),
-            @ApiResponse(responseCode = "400", description = "O pagamento não pode ser estornado", content = @Content(schema = @Schema(implementation = ErroResponse.class))),
+            @ApiResponse(responseCode = "200", description = "Registro de pagamento corrigido com sucesso"),
+            @ApiResponse(responseCode = "400", description = "O registro não pode ser corrigido", content = @Content(schema = @Schema(implementation = ErroResponse.class))),
             @ApiResponse(responseCode = "404", description = "Comanda ou pagamento não encontrado", content = @Content(schema = @Schema(implementation = ErroResponse.class)))
     })
-    @PatchMapping("/{pagamentoId}/estornar")
-    public PagamentoResponse estornar(@PathVariable Long comandaId, @PathVariable Long pagamentoId) {
-
-        return pagamentoService.estornar(comandaId, pagamentoId);
+    @PatchMapping({ "/{pagamentoId}/corrigir", "/{pagamentoId}/estornar" })
+    public PagamentoResponse corrigirRegistro(
+            @PathVariable Long comandaId,
+            @PathVariable Long pagamentoId,
+            @Valid @RequestBody CorrigirPagamentoRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+        return pagamentoService.corrigirRegistro(
+                comandaId,
+                pagamentoId,
+                request,
+                UUID.fromString(jwt.getSubject()));
     }
 
     @Operation(summary = "Consultar resumo financeiro", description = "Retorna o total da comanda, o valor pago e o saldo restante")

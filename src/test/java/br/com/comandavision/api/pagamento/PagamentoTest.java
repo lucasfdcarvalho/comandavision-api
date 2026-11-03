@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.math.BigDecimal;
+import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
@@ -51,16 +52,34 @@ public class PagamentoTest {
     }
 
     @Test
-    public void deveEstornarPagamentoConfirmado() {
+    public void deveCorrigirPagamentoConfirmadoComAuditoria() {
         Comanda comanda = new Comanda("Mesa 5", null);
         Pagamento pagamento = new Pagamento(comanda, FormaPagamento.PIX, new BigDecimal("20.00"));
         pagamento.confirmar("TRANSACAO-123");
         var dataDoPagamento = pagamento.getPagoEm();
 
-        pagamento.estornar();
+        UUID usuarioId = UUID.fromString("b35bbcb0-1128-45a2-bd16-cb8d99be154f");
+        pagamento.corrigirRegistro("Pagamento duplicado", usuarioId);
 
         assertEquals(StatusPagamento.ESTORNADO, pagamento.getStatus());
         assertEquals(dataDoPagamento, pagamento.getPagoEm());
         assertFalse(pagamento.estaConfirmado());
+        assertEquals("Pagamento duplicado", pagamento.getMotivoCorrecao());
+        assertEquals(usuarioId, pagamento.getCorrigidoPor());
+        assertNotNull(pagamento.getCorrigidoEm());
+    }
+
+    @Test
+    public void deveSepararDevolucaoDoProvedorDeCorrecaoManual() {
+        Comanda comanda = new Comanda("Mesa 5", null);
+        Pagamento pagamento = new Pagamento(comanda, FormaPagamento.PIX, new BigDecimal("20.00"));
+        pagamento.confirmar("TRANSACAO-123");
+
+        pagamento.confirmarDevolucaoPeloProvedor();
+
+        assertEquals(StatusPagamento.ESTORNADO, pagamento.getStatus());
+        assertNull(pagamento.getMotivoCorrecao());
+        assertNull(pagamento.getCorrigidoPor());
+        assertNull(pagamento.getCorrigidoEm());
     }
 }
