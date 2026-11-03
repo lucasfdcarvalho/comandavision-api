@@ -19,6 +19,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 
 import org.junit.jupiter.api.Test;
@@ -243,6 +244,46 @@ public class PagamentoServiceTest {
         assertEquals(StatusPagamento.CONFIRMADO, resposta.status());
         verify(comandaRepository, never()).findByIdForUpdate(any());
         verify(pagamentoRepository, never()).saveAndFlush(any());
+    }
+
+    @Test
+    public void deveDeduplicarRetryDeClienteLegadoSemCabecalho() {
+        Long comandaId = 10L;
+        UUID usuarioId = UUID.fromString("b35bbcb0-1128-45a2-bd16-cb8d99be154f");
+        Comanda comanda = new Comanda("Mesa 10", null);
+        ReflectionTestUtils.setField(comanda, "id", comandaId);
+        comanda.fechar();
+        Produto produto = new Produto(
+                new Categoria("Bebidas", null), "Suco", null, new BigDecimal("100.00"));
+        ItemComanda item = new ItemComanda(comanda, produto, 1, null);
+        RegistrarPagamentoRequest request = new RegistrarPagamentoRequest(
+                FormaPagamento.DINHEIRO, new BigDecimal("20.00"), null);
+        AtomicReference<Pagamento> salvo = new AtomicReference<>();
+
+        when(pagamentoRepository.findByChaveIdempotencia(any())).thenAnswer(chamada -> {
+            Pagamento pagamento = salvo.get();
+            return pagamento != null && pagamento.getChaveIdempotencia().equals(chamada.getArgument(0))
+                    ? Optional.of(pagamento)
+                    : Optional.empty();
+        });
+        when(comandaRepository.findByIdForUpdate(comandaId)).thenReturn(Optional.of(comanda));
+        when(itemComandaRepository.findByComandaIdOrderByCriadoEmAsc(comandaId)).thenReturn(List.of(item));
+        when(pagamentoRepository.findByComandaIdOrderByCriadoEmAsc(comandaId)).thenReturn(List.of());
+        when(pagamentoRepository.saveAndFlush(any(Pagamento.class))).thenAnswer(chamada -> {
+            Pagamento pagamento = chamada.getArgument(0);
+            ReflectionTestUtils.setField(pagamento, "id", 50L);
+            salvo.set(pagamento);
+            return pagamento;
+        });
+
+        PagamentoResponse primeira = pagamentoService.registrar(comandaId, request, null, usuarioId);
+        PagamentoResponse repetida = pagamentoService.registrar(comandaId, request, null, usuarioId);
+
+        assertEquals(50L, primeira.id());
+        assertEquals(primeira.id(), repetida.id());
+        assertNotNull(salvo.get().getChaveIdempotencia());
+        verify(comandaRepository, times(1)).findByIdForUpdate(comandaId);
+        verify(pagamentoRepository, times(1)).saveAndFlush(any(Pagamento.class));
     }
 
     @Test

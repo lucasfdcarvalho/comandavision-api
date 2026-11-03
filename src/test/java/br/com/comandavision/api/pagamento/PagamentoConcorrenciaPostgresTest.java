@@ -156,6 +156,44 @@ class PagamentoConcorrenciaPostgresTest {
     }
 
     @Test
+    void clienteLegadoSemCabecalhoRecebeMesmoPagamentoNoRetry() {
+        UUID usuarioId = UUID.fromString("b35bbcb0-1128-45a2-bd16-cb8d99be154f");
+        RegistrarPagamentoRequest request = new RegistrarPagamentoRequest(
+                FormaPagamento.DINHEIRO,
+                new BigDecimal("40.00"),
+                null);
+
+        PagamentoResponse primeira = pagamentoService.registrar(COMANDA_ID, request, null, usuarioId);
+        PagamentoResponse repetida = pagamentoService.registrar(COMANDA_ID, request, null, usuarioId);
+
+        assertEquals(primeira.id(), repetida.id());
+        assertEquals(1, consultarInteiroSemExcecao("SELECT count(*) FROM comandavision.pagamentos"));
+    }
+
+    @Test
+    void retriesLegadosSimultaneosCriamUmaUnicaLinha() throws Exception {
+        UUID usuarioId = UUID.fromString("b35bbcb0-1128-45a2-bd16-cb8d99be154f");
+        RegistrarPagamentoRequest request = new RegistrarPagamentoRequest(
+                FormaPagamento.DINHEIRO,
+                new BigDecimal("40.00"),
+                null);
+        CyclicBarrier inicio = new CyclicBarrier(2);
+
+        try (var executor = Executors.newFixedThreadPool(2)) {
+            var primeira = executor.submit(() -> registrarLegadoDepoisDaBarreira(
+                    inicio, request, usuarioId));
+            var segunda = executor.submit(() -> registrarLegadoDepoisDaBarreira(
+                    inicio, request, usuarioId));
+            PagamentoResponse resposta1 = primeira.get(15, TimeUnit.SECONDS);
+            PagamentoResponse resposta2 = segunda.get(15, TimeUnit.SECONDS);
+
+            assertEquals(resposta1.id(), resposta2.id());
+        }
+
+        assertEquals(1, consultarInteiroSemExcecao("SELECT count(*) FROM comandavision.pagamentos"));
+    }
+
+    @Test
     void duasRequisicoesSimultaneasNaoUltrapassamSaldo() throws Exception {
         RegistrarPagamentoRequest request = new RegistrarPagamentoRequest(
                 FormaPagamento.DINHEIRO,
@@ -210,6 +248,24 @@ class PagamentoConcorrenciaPostgresTest {
                 "SELECT count(*) FROM comandavision.pagamentos WHERE status = 'PENDENTE'"));
     }
 
+    @Test
+    void pixLegadoRepetidoReaproveitaCobrancaPendente() {
+        UUID usuarioId = UUID.fromString("b35bbcb0-1128-45a2-bd16-cb8d99be154f");
+        when(mercadoPagoClient.estaConfigurado()).thenReturn(true);
+        when(mercadoPagoClient.criarPedidoPix(any(), anyString(), anyString(), anyString()))
+                .thenReturn(pedido("ORD-PG-LEGADO"));
+
+        CobrancaPixResponse primeira = pixService.gerar(
+                COMANDA_ID, new BigDecimal("40.00"), null, usuarioId);
+        CobrancaPixResponse repetida = pixService.gerar(
+                COMANDA_ID, new BigDecimal("40.00"), null, usuarioId);
+
+        assertEquals(primeira.pagamentoId(), repetida.pagamentoId());
+        verify(mercadoPagoClient, times(1)).criarPedidoPix(any(), anyString(), anyString(), anyString());
+        assertEquals(1, consultarInteiroSemExcecao("SELECT count(*) FROM comandavision.cobrancas_pix"));
+        assertEquals(1, consultarInteiroSemExcecao("SELECT count(*) FROM comandavision.pagamentos"));
+    }
+
     private Object registrarDepoisDaBarreira(
             CyclicBarrier inicio,
             RegistrarPagamentoRequest request,
@@ -220,6 +276,14 @@ class PagamentoConcorrenciaPostgresTest {
         } catch (RuntimeException exception) {
             return exception;
         }
+    }
+
+    private PagamentoResponse registrarLegadoDepoisDaBarreira(
+            CyclicBarrier inicio,
+            RegistrarPagamentoRequest request,
+            UUID usuarioId) throws Exception {
+        inicio.await(5, TimeUnit.SECONDS);
+        return pagamentoService.registrar(COMANDA_ID, request, null, usuarioId);
     }
 
     private Object gerarPixDepoisDaBarreira(CyclicBarrier inicio, String chave) throws Exception {

@@ -3,6 +3,7 @@ package br.com.comandavision.api.pagamento;
 import br.com.comandavision.api.pix.CobrancaPixPendenteException;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -49,9 +50,37 @@ public class PagamentoService {
                         RegistrarPagamentoRequest request,
                         String chaveIdempotencia) {
 
-                String chave = ChaveIdempotencia.validar(chaveIdempotencia);
+                return registrar(comandaId, request, ChaveIdempotencia.obrigatoria(chaveIdempotencia));
+        }
 
-                Pagamento repetido = pagamentoRepository.findByChaveIdempotencia(chave).orElse(null);
+        @Transactional
+        public PagamentoResponse registrar(
+                        Long comandaId,
+                        RegistrarPagamentoRequest request,
+                        String chaveIdempotencia,
+                        UUID usuarioId) {
+
+                ChaveIdempotencia.Resolucao resolucao = ChaveIdempotencia.resolverTemporaria(
+                                chaveIdempotencia,
+                                usuarioId,
+                                "pagamento-manual",
+                                comandaId,
+                                List.of(
+                                                request.forma().name(),
+                                                request.valor().stripTrailingZeros().toPlainString(),
+                                                Objects.toString(request.referenciaExterna(), "")),
+                                Instant.now());
+                return registrar(comandaId, request, resolucao);
+        }
+
+        private PagamentoResponse registrar(
+                        Long comandaId,
+                        RegistrarPagamentoRequest request,
+                        ChaveIdempotencia.Resolucao resolucao) {
+
+                String chave = resolucao.efetiva();
+
+                Pagamento repetido = buscarRepetido(resolucao);
                 if (repetido != null) {
                         validarRepeticao(repetido, comandaId, request);
                         return PagamentoResponse.from(repetido);
@@ -61,7 +90,7 @@ public class PagamentoService {
                 Comanda comanda = comandaRepository.findByIdForUpdate(comandaId)
                                 .orElseThrow(() -> new ComandaNaoEncontradaException(comandaId));
 
-                repetido = pagamentoRepository.findByChaveIdempotencia(chave).orElse(null);
+                repetido = buscarRepetido(resolucao);
                 if (repetido != null) {
                         validarRepeticao(repetido, comandaId, request);
                         return PagamentoResponse.from(repetido);
@@ -107,6 +136,16 @@ public class PagamentoService {
                 Pagamento pagamentoSalvo = pagamentoRepository.saveAndFlush(pagamento);
 
                 return PagamentoResponse.from(pagamentoSalvo);
+        }
+
+        private Pagamento buscarRepetido(ChaveIdempotencia.Resolucao resolucao) {
+                for (String candidata : resolucao.candidatas()) {
+                        Pagamento encontrado = pagamentoRepository.findByChaveIdempotencia(candidata).orElse(null);
+                        if (encontrado != null) {
+                                return encontrado;
+                        }
+                }
+                return null;
         }
 
         @Transactional

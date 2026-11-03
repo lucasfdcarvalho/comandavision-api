@@ -1,6 +1,10 @@
 package br.com.comandavision.api.pix;
 
+import java.util.UUID;
+
 import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -48,9 +52,14 @@ public class PixController {
     @ResponseStatus(HttpStatus.CREATED)
     public CobrancaPixResponse gerar(
             @PathVariable Long comandaId,
-            @RequestHeader(name = "Idempotency-Key") String chaveIdempotencia,
-            @Valid @RequestBody GerarPixRequest request) {
-        return pixService.gerar(comandaId, request.valor(), chaveIdempotencia);
+            @RequestHeader(name = "Idempotency-Key", required = false) String chaveIdempotencia,
+            @Valid @RequestBody GerarPixRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+        return pixService.gerar(
+                comandaId,
+                request.valor(),
+                chaveIdempotencia,
+                UUID.fromString(jwt.getSubject()));
     }
 
     @Operation(summary = "Consultar Pix", description = "Confere no Mercado Pago se o Pix foi pago e devolve a situação atual")

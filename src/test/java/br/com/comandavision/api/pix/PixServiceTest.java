@@ -14,6 +14,7 @@ import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -197,6 +198,46 @@ public class PixServiceTest {
         assertEquals(StatusPagamento.PENDENTE, resposta.status());
         verify(mercadoPagoClient, never()).criarPedidoPix(any(), anyString(), anyString(), anyString());
         verify(mercadoPagoClient, never()).buscarPedidoPorReferencia(anyString(), any(), any());
+    }
+
+    @Test
+    public void deveDeduplicarPixDeClienteLegadoSemCabecalho() {
+        UUID usuarioId = UUID.fromString("b35bbcb0-1128-45a2-bd16-cb8d99be154f");
+        AtomicReference<Pagamento> pagamentoSalvo = new AtomicReference<>();
+        AtomicReference<CobrancaPix> cobrancaSalva = new AtomicReference<>();
+        when(pagamentoRepository.findByChaveIdempotencia(anyString())).thenAnswer(chamada -> {
+            Pagamento pagamento = pagamentoSalvo.get();
+            return pagamento != null && pagamento.getChaveIdempotencia().equals(chamada.getArgument(0))
+                    ? Optional.of(pagamento)
+                    : Optional.empty();
+        });
+        when(pagamentoRepository.saveAndFlush(any(Pagamento.class))).thenAnswer(chamada -> {
+            Pagamento pagamento = chamada.getArgument(0);
+            ReflectionTestUtils.setField(pagamento, "id", 1L);
+            pagamentoSalvo.set(pagamento);
+            ultimoPagamentoSalvo = pagamento;
+            return pagamento;
+        });
+        when(cobrancaPixRepository.findByPagamentoId(1L))
+                .thenAnswer(chamada -> Optional.ofNullable(cobrancaSalva.get()));
+        when(cobrancaPixRepository.saveAndFlush(any(CobrancaPix.class))).thenAnswer(chamada -> {
+            CobrancaPix cobranca = chamada.getArgument(0);
+            cobrancaSalva.set(cobranca);
+            return cobranca;
+        });
+        when(mercadoPagoClient.criarPedidoPix(any(), anyString(), anyString(), anyString()))
+                .thenReturn(pedido("action_required"));
+
+        CobrancaPixResponse primeira = pixService.gerar(
+                COMANDA_ID, new BigDecimal("40.00"), null, usuarioId);
+        CobrancaPixResponse repetida = pixService.gerar(
+                COMANDA_ID, new BigDecimal("40.00"), null, usuarioId);
+
+        assertEquals(primeira.pagamentoId(), repetida.pagamentoId());
+        assertEquals(primeira.qrCode(), repetida.qrCode());
+        verify(mercadoPagoClient, times(1))
+                .criarPedidoPix(any(), anyString(), anyString(), anyString());
+        verify(pagamentoRepository, times(1)).saveAndFlush(any(Pagamento.class));
     }
 
     @Test

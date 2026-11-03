@@ -4,6 +4,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import org.junit.jupiter.api.Test;
@@ -19,7 +20,10 @@ import org.springframework.test.web.servlet.MockMvc;
 import br.com.comandavision.api.pagamento.PagamentoController;
 import br.com.comandavision.api.pagamento.PagamentoService;
 import br.com.comandavision.api.pagamento.dto.CorrigirPagamentoRequest;
+import br.com.comandavision.api.pagamento.dto.RegistrarPagamentoRequest;
+import br.com.comandavision.api.pagamento.FormaPagamento;
 
+import java.math.BigDecimal;
 import java.util.UUID;
 
 @WebMvcTest(PagamentoController.class)
@@ -66,6 +70,40 @@ class SegurancaPagamentoTest {
 
         verify(pagamentoService).corrigirRegistro(
                 10L, 20L, new CorrigirPagamentoRequest("Forma informada errada"), usuarioId);
+    }
+
+    @Test
+    void deveAceitarRegistroLegadoSemCabecalhoDeIdempotencia() throws Exception {
+        UUID usuarioId = UUID.fromString("b35bbcb0-1128-45a2-bd16-cb8d99be154f");
+        mockMvc.perform(post("/api/comandas/10/pagamentos")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"forma\":\"DINHEIRO\",\"valor\":20.00}")
+                .with(jwt()
+                        .jwt(token -> token.subject(usuarioId.toString()).claim("user_role", "FUNCIONARIO"))
+                        .authorities(new SimpleGrantedAuthority("ROLE_FUNCIONARIO"))))
+                .andExpect(status().isCreated());
+
+        verify(pagamentoService).registrar(
+                10L,
+                new RegistrarPagamentoRequest(FormaPagamento.DINHEIRO, new BigDecimal("20.00"), null),
+                null,
+                usuarioId);
+    }
+
+    @Test
+    void deveAuditarEstornoLegadoSemCorpo() throws Exception {
+        UUID usuarioId = UUID.fromString("b35bbcb0-1128-45a2-bd16-cb8d99be154f");
+        mockMvc.perform(patch("/api/comandas/10/pagamentos/20/estornar")
+                .with(jwt()
+                        .jwt(token -> token.subject(usuarioId.toString()).claim("user_role", "FUNCIONARIO"))
+                        .authorities(new SimpleGrantedAuthority("ROLE_FUNCIONARIO"))))
+                .andExpect(status().isOk());
+
+        verify(pagamentoService).corrigirRegistro(
+                10L,
+                20L,
+                new CorrigirPagamentoRequest("Correção registrada por versão anterior do aplicativo"),
+                usuarioId);
     }
 
     @Test

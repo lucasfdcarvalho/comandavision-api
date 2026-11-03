@@ -2,9 +2,11 @@ package br.com.comandavision.api.pix;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Objects;
+import java.util.UUID;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -67,11 +69,31 @@ public class PixService {
     }
 
     public CobrancaPixResponse gerar(Long comandaId, BigDecimal valor, String chaveIdempotencia) {
+        return gerar(comandaId, valor, ChaveIdempotencia.obrigatoria(chaveIdempotencia));
+    }
+
+    public CobrancaPixResponse gerar(
+            Long comandaId,
+            BigDecimal valor,
+            String chaveIdempotencia,
+            UUID usuarioId) {
+        ChaveIdempotencia.Resolucao resolucao = ChaveIdempotencia.resolverTemporaria(
+                chaveIdempotencia,
+                usuarioId,
+                "pix-integrado",
+                comandaId,
+                List.of(valor.stripTrailingZeros().toPlainString()),
+                Instant.now());
+        return gerar(comandaId, valor, resolucao);
+    }
+
+    private CobrancaPixResponse gerar(
+            Long comandaId,
+            BigDecimal valor,
+            ChaveIdempotencia.Resolucao resolucao) {
         if (!mercadoPagoClient.estaConfigurado()) {
             throw new PixIndisponivelException();
         }
-
-        String chave = ChaveIdempotencia.validar(chaveIdempotencia);
 
         // Pix pendentes já vencidos podem ter sido pagos no último minuto: confere antes de calcular o saldo.
         OffsetDateTime agora = OffsetDateTime.now();
@@ -79,7 +101,7 @@ public class PixService {
                 .filter(cobranca -> cobranca.expirou(agora))
                 .forEach(this::sincronizar);
 
-        ReservaPagamento reserva = transacao.execute(status -> reservarPagamento(comandaId, valor, chave));
+        ReservaPagamento reserva = transacao.execute(status -> reservarPagamento(comandaId, valor, resolucao));
         if (reserva == null) {
             throw new IllegalStateException("Não foi possível reservar o pagamento Pix");
         }
@@ -90,8 +112,9 @@ public class PixService {
             return CobrancaPixResponse.from(cobrancaExistente);
         }
 
-        String referencia = referenciaExterna(comandaId, chave);
-        PedidoMercadoPago pedido = criarOuRecuperarPedido(reserva, valor, referencia, chave);
+        String chaveEfetiva = reserva.pagamento().getChaveIdempotencia();
+        String referencia = referenciaExterna(comandaId, chaveEfetiva);
+        PedidoMercadoPago pedido = criarOuRecuperarPedido(reserva, valor, referencia, chaveEfetiva);
 
         if (pedido == null || pedido.id() == null || pedido.qrCode() == null || pedido.qrCodeBase64() == null) {
             throw new FalhaMercadoPagoException("O Mercado Pago não devolveu o QR Code do Pix. Tente novamente", null);
@@ -189,8 +212,11 @@ public class PixService {
         });
     }
 
-    private ReservaPagamento reservarPagamento(Long comandaId, BigDecimal valor, String chave) {
-        Pagamento repetido = pagamentoRepository.findByChaveIdempotencia(chave).orElse(null);
+    private ReservaPagamento reservarPagamento(
+            Long comandaId,
+            BigDecimal valor,
+            ChaveIdempotencia.Resolucao resolucao) {
+        Pagamento repetido = buscarRepetido(resolucao);
         if (repetido != null) {
             validarRepeticaoPix(repetido, comandaId, valor);
             return new ReservaPagamento(repetido, false);
@@ -199,16 +225,44 @@ public class PixService {
         Comanda comanda = comandaRepository.findByIdForUpdate(comandaId)
                 .orElseThrow(() -> new ComandaNaoEncontradaException(comandaId));
 
-        repetido = pagamentoRepository.findByChaveIdempotencia(chave).orElse(null);
+        repetido = buscarRepetido(resolucao);
         if (repetido != null) {
             validarRepeticaoPix(repetido, comandaId, valor);
             return new ReservaPagamento(repetido, false);
         }
 
+        if (resolucao.legada()) {
+            List<Pagamento> pagamentos = pagamentoRepository.findByComandaIdOrderByCriadoEmAsc(comandaId);
+            List<Pagamento> pixPendentes = pagamentos.stream()
+                    .filter(pagamento -> pagamento.getForma() == FormaPagamento.PIX)
+                    .filter(pagamento -> pagamento.getStatus() == StatusPagamento.PENDENTE)
+                    .toList();
+            Pagamento mesmoPixPendente = pixPendentes.stream()
+                    .filter(pagamento -> pagamento.getValor().compareTo(valor) == 0)
+                    .findFirst()
+                    .orElse(null);
+            if (mesmoPixPendente != null) {
+                return new ReservaPagamento(mesmoPixPendente, false);
+            }
+            if (!pixPendentes.isEmpty()) {
+                throw new CobrancaPixPendenteException(somar(pixPendentes, StatusPagamento.PENDENTE));
+            }
+        }
+
         validarValor(comandaId, valor);
         Pagamento pagamento = pagamentoRepository.saveAndFlush(
-                new Pagamento(comanda, FormaPagamento.PIX, valor, chave));
+                new Pagamento(comanda, FormaPagamento.PIX, valor, resolucao.efetiva()));
         return new ReservaPagamento(pagamento, true);
+    }
+
+    private Pagamento buscarRepetido(ChaveIdempotencia.Resolucao resolucao) {
+        for (String candidata : resolucao.candidatas()) {
+            Pagamento encontrado = pagamentoRepository.findByChaveIdempotencia(candidata).orElse(null);
+            if (encontrado != null) {
+                return encontrado;
+            }
+        }
+        return null;
     }
 
     private PedidoMercadoPago criarOuRecuperarPedido(

@@ -52,9 +52,14 @@ public class PagamentoController {
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public PagamentoResponse registrar(@PathVariable Long comandaId,
-            @RequestHeader(name = "Idempotency-Key") String chaveIdempotencia,
-            @Valid @RequestBody RegistrarPagamentoRequest request) {
-        return pagamentoService.registrar(comandaId, request, chaveIdempotencia);
+            @RequestHeader(name = "Idempotency-Key", required = false) String chaveIdempotencia,
+            @Valid @RequestBody RegistrarPagamentoRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+        return pagamentoService.registrar(
+                comandaId,
+                request,
+                chaveIdempotencia,
+                UUID.fromString(jwt.getSubject()));
     }
 
     @Operation(summary = "Listar pagamentos", description = "Retorna os pagamentos registrados para uma comanda")
@@ -73,7 +78,7 @@ public class PagamentoController {
             @ApiResponse(responseCode = "400", description = "O registro não pode ser corrigido", content = @Content(schema = @Schema(implementation = ErroResponse.class))),
             @ApiResponse(responseCode = "404", description = "Comanda ou pagamento não encontrado", content = @Content(schema = @Schema(implementation = ErroResponse.class)))
     })
-    @PatchMapping({ "/{pagamentoId}/corrigir", "/{pagamentoId}/estornar" })
+    @PatchMapping("/{pagamentoId}/corrigir")
     public PagamentoResponse corrigirRegistro(
             @PathVariable Long comandaId,
             @PathVariable Long pagamentoId,
@@ -83,6 +88,23 @@ public class PagamentoController {
                 comandaId,
                 pagamentoId,
                 request,
+                UUID.fromString(jwt.getSubject()));
+    }
+
+    @Operation(summary = "Compatibilidade: estornar pagamento manual", description = "Rota temporária para versões anteriores do aplicativo. Mantém auditoria e não movimenta dinheiro")
+    @PatchMapping("/{pagamentoId}/estornar")
+    public PagamentoResponse corrigirRegistroLegado(
+            @PathVariable Long comandaId,
+            @PathVariable Long pagamentoId,
+            @Valid @RequestBody(required = false) CorrigirPagamentoRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+        CorrigirPagamentoRequest requestAuditado = request == null
+                ? new CorrigirPagamentoRequest("Correção registrada por versão anterior do aplicativo")
+                : request;
+        return pagamentoService.corrigirRegistro(
+                comandaId,
+                pagamentoId,
+                requestAuditado,
                 UUID.fromString(jwt.getSubject()));
     }
 
