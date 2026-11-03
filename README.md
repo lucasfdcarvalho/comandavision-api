@@ -206,4 +206,3 @@ Antes de atualizar `main`:
 - não inclua secrets no Git.
 
 Migrações aplicadas não possuem rollback automático. A ausência de erros no build não garante que Mercado Pago, Supabase Auth ou o aplicativo estejam configurados corretamente no ambiente publicado.
-
