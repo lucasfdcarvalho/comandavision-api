@@ -1,7 +1,7 @@
 package br.com.comandavision.api.dashboard.projection;
 
 import java.math.BigDecimal;
-import java.time.OffsetDateTime;
+import java.time.Instant;
 
 public interface ComandaEncerradaProjection {
     Long getId();
@@ -10,7 +10,7 @@ public interface ComandaEncerradaProjection {
 
     String getStatus();
 
-    OffsetDateTime getEncerradaEm();
+    Instant getEncerradaEm();
 
     BigDecimal getTotal();
 
