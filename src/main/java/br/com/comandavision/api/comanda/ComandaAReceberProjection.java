@@ -1,14 +1,14 @@
 package br.com.comandavision.api.comanda;
 
 import java.math.BigDecimal;
-import java.time.OffsetDateTime;
+import java.time.Instant;
 
 public interface ComandaAReceberProjection {
     Long getId();
 
     String getIdentificacao();
 
-    OffsetDateTime getFechadaEm();
+    Instant getFechadaEm();
 
     BigDecimal getTotal();
 

@@ -340,7 +340,7 @@ public class DashboardServiceTest {
         when(resultado.getId()).thenReturn(42L);
         when(resultado.getIdentificacao()).thenReturn("Mesa 12");
         when(resultado.getStatus()).thenReturn("FECHADA");
-        when(resultado.getEncerradaEm()).thenReturn(encerradaEm);
+        when(resultado.getEncerradaEm()).thenReturn(encerradaEm.toInstant());
         when(resultado.getTotal()).thenReturn(new BigDecimal("128.50"));
         when(resultado.getTotalPago()).thenReturn(new BigDecimal("128.50"));
         when(resultado.getComputadaNosIndicadores()).thenReturn(true);

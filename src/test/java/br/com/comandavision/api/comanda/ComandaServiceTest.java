@@ -55,7 +55,7 @@ public class ComandaServiceTest {
         OffsetDateTime fechadaEm = OffsetDateTime.parse("2026-11-03T19:42:00-03:00");
         when(projection.getId()).thenReturn(1042L);
         when(projection.getIdentificacao()).thenReturn("Mesa 6");
-        when(projection.getFechadaEm()).thenReturn(fechadaEm);
+        when(projection.getFechadaEm()).thenReturn(fechadaEm.toInstant());
         when(projection.getTotal()).thenReturn(new BigDecimal("100.00"));
         when(projection.getTotalPago()).thenReturn(new BigDecimal("60.00"));
         when(projection.getSaldoRestante()).thenReturn(new BigDecimal("40.00"));
@@ -67,7 +67,7 @@ public class ComandaServiceTest {
         assertEquals(1, resposta.size());
         assertEquals(1042L, resposta.getFirst().id());
         assertEquals("Mesa 6", resposta.getFirst().identificacao());
-        assertEquals(fechadaEm, resposta.getFirst().fechadaEm());
+        assertEquals(fechadaEm.toInstant(), resposta.getFirst().fechadaEm().toInstant());
         assertEquals(new BigDecimal("100.00"), resposta.getFirst().total());
         assertEquals(new BigDecimal("60.00"), resposta.getFirst().totalPago());
         assertEquals(new BigDecimal("40.00"), resposta.getFirst().saldoRestante());

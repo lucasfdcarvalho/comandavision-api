@@ -1,6 +1,7 @@
 package br.com.comandavision.api.pagamento;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
@@ -13,6 +14,8 @@ import static org.mockito.Mockito.when;
 import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -42,6 +45,8 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
 
 import br.com.comandavision.api.pagamento.dto.PagamentoResponse;
 import br.com.comandavision.api.comanda.ComandaRepository;
+import br.com.comandavision.api.comanda.dto.ComandaAReceberResponse;
+import br.com.comandavision.api.dashboard.service.DashboardService;
 import br.com.comandavision.api.pagamento.dto.CorrigirPagamentoRequest;
 import br.com.comandavision.api.pagamento.dto.RegistrarPagamentoRequest;
 import br.com.comandavision.api.pix.CobrancaPixPendenteException;
@@ -70,6 +75,8 @@ class PagamentoConcorrenciaPostgresTest {
     MercadoPagoClient mercadoPagoClient;
     @Autowired
     ComandaRepository comandaRepository;
+    @Autowired
+    DashboardService dashboardService;
 
     @BeforeEach
     void preparar() throws Exception {
@@ -196,6 +203,36 @@ class PagamentoConcorrenciaPostgresTest {
         assertEquals(resumo.totalComanda(), comandas.get(1).getTotal());
         assertEquals(resumo.totalPago(), comandas.get(1).getTotalPago());
         assertEquals(resumo.saldoRestante(), comandas.get(1).getSaldoRestante());
+
+        // A rota serializa o DTO: a conversão precisa funcionar com a projeção real do Hibernate.
+        var respostas = comandas.stream().map(ComandaAReceberResponse::from).toList();
+        assertEquals(SituacaoPagamento.NAO_PAGO, respostas.get(0).situacaoPagamento());
+        assertEquals(SituacaoPagamento.PARCIAL, respostas.get(1).situacaoPagamento());
+        assertNotNull(respostas.get(0).fechadaEm());
+        assertNotNull(respostas.get(1).fechadaEm());
+    }
+
+    @Test
+    void dashboardMapeiaProjecoesReaisDoHibernate() throws Exception {
+        executar("INSERT INTO comandavision.pagamentos "
+                + "(comanda_id, forma, status, valor, pago_em) "
+                + "VALUES (1, 'DINHEIRO', 'CONFIRMADO', 100.00, CURRENT_TIMESTAMP)");
+        LocalDate hoje = LocalDate.now(ZoneId.of("America/Sao_Paulo"));
+        LocalDate inicio = hoje.minusDays(1);
+        LocalDate fim = hoje.plusDays(1);
+
+        var encerradas = dashboardService.buscarComandasEncerradas(inicio, fim);
+        assertEquals(1, encerradas.size());
+        assertNotNull(encerradas.getFirst().encerradaEm());
+
+        var faturamentoDiario = dashboardService.buscarFaturamentoDiario(inicio, fim);
+        // A query inclui os dias sem venda, um por dia do período.
+        assertEquals(List.of(inicio, hoje, fim), faturamentoDiario.stream().map(dia -> dia.data()).toList());
+        assertEquals(new BigDecimal("100.00"), faturamentoDiario.get(1).faturamento());
+
+        assertEquals(1, dashboardService.buscarProdutosMaisVendidos(inicio, fim, 5).size());
+        assertEquals(1, dashboardService.buscarResumoPorFormaPagamento(inicio, fim).size());
+        assertEquals(1L, dashboardService.buscarResumo(inicio, fim).quantidadeVendas());
     }
 
     @Test
@@ -400,10 +437,11 @@ class PagamentoConcorrenciaPostgresTest {
     @EnableTransactionManagement
     @EnableJpaRepositories(basePackages = {
             "br.com.comandavision.api.comanda",
+            "br.com.comandavision.api.dashboard",
             "br.com.comandavision.api.pagamento",
             "br.com.comandavision.api.pix"
     })
-    @Import({ PagamentoService.class, PixService.class })
+    @Import({ DashboardService.class, PagamentoService.class, PixService.class })
     static class Configuracao {
         @Bean
         DataSource dataSource() throws Exception {

@@ -143,7 +143,7 @@ public class DashboardService {
                         resultado.getId(),
                         resultado.getIdentificacao(),
                         StatusComanda.valueOf(resultado.getStatus()),
-                        resultado.getEncerradaEm(),
+                        resultado.getEncerradaEm().atZone(FUSO_HORARIO).toOffsetDateTime(),
                         resultado.getTotal(),
                         resultado.getTotalPago(),
                         Boolean.TRUE.equals(resultado.getComputadaNosIndicadores())))
