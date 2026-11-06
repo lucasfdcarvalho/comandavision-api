@@ -41,6 +41,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 
 import br.com.comandavision.api.pagamento.dto.PagamentoResponse;
+import br.com.comandavision.api.comanda.ComandaRepository;
 import br.com.comandavision.api.pagamento.dto.CorrigirPagamentoRequest;
 import br.com.comandavision.api.pagamento.dto.RegistrarPagamentoRequest;
 import br.com.comandavision.api.pix.CobrancaPixPendenteException;
@@ -67,6 +68,8 @@ class PagamentoConcorrenciaPostgresTest {
     PixService pixService;
     @Autowired
     MercadoPagoClient mercadoPagoClient;
+    @Autowired
+    ComandaRepository comandaRepository;
 
     @BeforeEach
     void preparar() throws Exception {
@@ -138,6 +141,61 @@ class PagamentoConcorrenciaPostgresTest {
             }
         }
         assertEquals(1, consultarInteiro("SELECT count(*) FROM comandavision.pagamentos"));
+        var aposCorrecao = comandaRepository.listarAReceber();
+        assertEquals(1, aposCorrecao.size());
+        assertEquals(new BigDecimal("100.00"), aposCorrecao.getFirst().getSaldoRestante());
+    }
+
+    @Test
+    void listaAReceberAgregaSemMultiplicarItensOuPagamentosEDistingueNomesReutilizados() throws Exception {
+        executar("UPDATE comandavision.comandas SET identificacao = 'Mesa 6', "
+                + "aberta_em = CURRENT_TIMESTAMP - INTERVAL '2 hours', "
+                + "fechada_em = CURRENT_TIMESTAMP - INTERVAL '1 hour' WHERE id = 1");
+        executar("INSERT INTO comandavision.itens_comanda "
+                + "(comanda_id, produto_id, quantidade, preco_unitario) VALUES "
+                + "(1, 1, 1, 100.00), (1, 1, 1, 100.00)");
+        executar("INSERT INTO comandavision.pagamentos "
+                + "(comanda_id, forma, status, valor, pago_em) VALUES "
+                + "(1, 'DINHEIRO', 'CONFIRMADO', 40.00, CURRENT_TIMESTAMP), "
+                + "(1, 'CARTAO_DEBITO', 'CONFIRMADO', 20.00, CURRENT_TIMESTAMP)");
+
+        executar("INSERT INTO comandavision.comandas (identificacao, status, fechada_em) "
+                + "VALUES ('Mesa 6', 'FECHADA', CURRENT_TIMESTAMP)");
+        executar("INSERT INTO comandavision.itens_comanda "
+                + "(comanda_id, produto_id, quantidade, preco_unitario) VALUES (2, 1, 1, 100.00)");
+
+        executar("INSERT INTO comandavision.comandas (identificacao, status, fechada_em) "
+                + "VALUES ('Mesa cancelada', 'CANCELADA', CURRENT_TIMESTAMP)");
+        executar("INSERT INTO comandavision.itens_comanda "
+                + "(comanda_id, produto_id, quantidade, preco_unitario) VALUES (3, 1, 1, 100.00)");
+
+        executar("INSERT INTO comandavision.comandas (identificacao, status, fechada_em) "
+                + "VALUES ('Mesa quitada', 'FECHADA', CURRENT_TIMESTAMP)");
+        executar("INSERT INTO comandavision.itens_comanda "
+                + "(comanda_id, produto_id, quantidade, preco_unitario) VALUES (4, 1, 1, 100.00)");
+        executar("INSERT INTO comandavision.pagamentos "
+                + "(comanda_id, forma, status, valor, pago_em) "
+                + "VALUES (4, 'DINHEIRO', 'CONFIRMADO', 100.00, CURRENT_TIMESTAMP)");
+
+        var comandas = comandaRepository.listarAReceber();
+
+        assertEquals(List.of(2L, 1L), comandas.stream().map(comanda -> comanda.getId()).toList());
+        assertEquals("Mesa 6", comandas.get(0).getIdentificacao());
+        assertEquals(new BigDecimal("100.00"), comandas.get(0).getTotal());
+        assertEquals(new BigDecimal("0"), comandas.get(0).getTotalPago());
+        assertEquals(new BigDecimal("100.00"), comandas.get(0).getSaldoRestante());
+        assertEquals("NAO_PAGO", comandas.get(0).getSituacaoPagamento());
+
+        assertEquals("Mesa 6", comandas.get(1).getIdentificacao());
+        assertEquals(new BigDecimal("300.00"), comandas.get(1).getTotal());
+        assertEquals(new BigDecimal("60.00"), comandas.get(1).getTotalPago());
+        assertEquals(new BigDecimal("240.00"), comandas.get(1).getSaldoRestante());
+        assertEquals("PARCIAL", comandas.get(1).getSituacaoPagamento());
+
+        var resumo = pagamentoService.buscarResumo(1L);
+        assertEquals(resumo.totalComanda(), comandas.get(1).getTotal());
+        assertEquals(resumo.totalPago(), comandas.get(1).getTotalPago());
+        assertEquals(resumo.saldoRestante(), comandas.get(1).getSaldoRestante());
     }
 
     @Test
@@ -219,6 +277,9 @@ class PagamentoConcorrenciaPostgresTest {
                 "SELECT count(*) FROM comandavision.pagamentos WHERE status = 'CONFIRMADO'"));
         assertEquals(new BigDecimal("70.00"), consultarDecimal(
                 "SELECT coalesce(sum(valor), 0) FROM comandavision.pagamentos WHERE status = 'CONFIRMADO'"));
+        var aReceber = comandaRepository.listarAReceber();
+        assertEquals(1, aReceber.size());
+        assertEquals(new BigDecimal("30.00"), aReceber.getFirst().getSaldoRestante());
     }
 
     @Test

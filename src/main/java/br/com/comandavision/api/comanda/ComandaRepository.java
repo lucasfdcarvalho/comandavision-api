@@ -7,6 +7,7 @@ import org.springframework.data.repository.query.Param;
 
 import jakarta.persistence.LockModeType;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface ComandaRepository extends JpaRepository<Comanda, Long> {
@@ -23,4 +24,37 @@ public interface ComandaRepository extends JpaRepository<Comanda, Long> {
             )
             """, nativeQuery = true)
     boolean existeAbertaComIdentificacao(@Param("identificacao") String identificacao);
+
+    @Query(value = """
+            WITH totais_itens AS (
+                SELECT item.comanda_id,
+                       SUM(item.quantidade * item.preco_unitario) AS total
+                FROM comandavision.itens_comanda item
+                GROUP BY item.comanda_id
+            ),
+            totais_pagamentos AS (
+                SELECT pagamento.comanda_id,
+                       SUM(pagamento.valor) AS total_pago
+                FROM comandavision.pagamentos pagamento
+                WHERE pagamento.status = 'CONFIRMADO'
+                GROUP BY pagamento.comanda_id
+            )
+            SELECT comanda.id AS id,
+                   comanda.identificacao AS identificacao,
+                   comanda.fechada_em AS fechadaEm,
+                   itens.total AS total,
+                   COALESCE(pagamentos.total_pago, 0) AS totalPago,
+                   itens.total - COALESCE(pagamentos.total_pago, 0) AS saldoRestante,
+                   CASE
+                       WHEN COALESCE(pagamentos.total_pago, 0) > 0 THEN 'PARCIAL'
+                       ELSE 'NAO_PAGO'
+                   END AS situacaoPagamento
+            FROM comandavision.comandas comanda
+            JOIN totais_itens itens ON itens.comanda_id = comanda.id
+            LEFT JOIN totais_pagamentos pagamentos ON pagamentos.comanda_id = comanda.id
+            WHERE comanda.status = 'FECHADA'
+              AND itens.total - COALESCE(pagamentos.total_pago, 0) > 0
+            ORDER BY comanda.fechada_em DESC NULLS LAST, comanda.id DESC
+            """, nativeQuery = true)
+    List<ComandaAReceberProjection> listarAReceber();
 }
