@@ -9,6 +9,7 @@ import java.util.List;
 
 import br.com.comandavision.api.comanda.dto.AdicionarItemComandaRequest;
 import br.com.comandavision.api.comanda.dto.ComandaResponse;
+import br.com.comandavision.api.comanda.dto.ComandaAReceberResponse;
 import br.com.comandavision.api.comanda.dto.CriarComandaRequest;
 import br.com.comandavision.api.comanda.dto.ItemComandaResponse;
 import br.com.comandavision.api.comanda.dto.ComandaDetalhadaResponse;
@@ -71,6 +72,13 @@ public class ComandaService {
     public List<ComandaResponse> listar() {
         return this.comandaRepository.findAll(Sort.by(Sort.Direction.DESC, "abertaEm")).stream()
                 .map(ComandaResponse::from).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ComandaAReceberResponse> listarAReceber() {
+        return comandaRepository.listarAReceber().stream()
+                .map(ComandaAReceberResponse::from)
+                .toList();
     }
 
     @Transactional(readOnly = true)

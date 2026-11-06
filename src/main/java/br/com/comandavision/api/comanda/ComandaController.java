@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import br.com.comandavision.api.comanda.dto.AdicionarItemComandaRequest;
+import br.com.comandavision.api.comanda.dto.ComandaAReceberResponse;
 import br.com.comandavision.api.comanda.dto.AtualizarItemComandaRequest;
 import br.com.comandavision.api.comanda.dto.ComandaResponse;
 import br.com.comandavision.api.comanda.dto.CriarComandaRequest;
@@ -59,6 +60,13 @@ public class ComandaController {
     @GetMapping
     public List<ComandaResponse> listar() {
         return this.comandaService.listar();
+    }
+
+    @Operation(summary = "Listar comandas a receber", description = "Retorna comandas fechadas com saldo pendente, total e situação do pagamento")
+    @ApiResponse(responseCode = "200", description = "Comandas a receber retornadas com sucesso")
+    @GetMapping("/a-receber")
+    public List<ComandaAReceberResponse> listarAReceber() {
+        return comandaService.listarAReceber();
     }
 
     @Operation(summary = "Buscar comanda por ID", description = "Retorna a comanda com seus itens e o valor total")

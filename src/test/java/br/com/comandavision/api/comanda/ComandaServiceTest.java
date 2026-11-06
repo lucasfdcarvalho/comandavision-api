@@ -10,6 +10,7 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import java.math.BigDecimal;
+import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -30,6 +31,7 @@ import br.com.comandavision.api.comanda.dto.AdicionarItemComandaRequest;
 import br.com.comandavision.api.comanda.dto.AtualizarItemComandaRequest;
 import br.com.comandavision.api.comanda.dto.ComandaDetalhadaResponse;
 import br.com.comandavision.api.comanda.dto.CriarComandaRequest;
+import br.com.comandavision.api.pagamento.SituacaoPagamento;
 import br.com.comandavision.api.produto.Produto;
 import br.com.comandavision.api.produto.ProdutoRepository;
 
@@ -46,6 +48,31 @@ public class ComandaServiceTest {
 
     @InjectMocks
     private ComandaService comandaService;
+
+    @Test
+    void deveMapearComandasAReceberSemRecalcularValores() {
+        var projection = org.mockito.Mockito.mock(ComandaAReceberProjection.class);
+        OffsetDateTime fechadaEm = OffsetDateTime.parse("2026-11-03T19:42:00-03:00");
+        when(projection.getId()).thenReturn(1042L);
+        when(projection.getIdentificacao()).thenReturn("Mesa 6");
+        when(projection.getFechadaEm()).thenReturn(fechadaEm);
+        when(projection.getTotal()).thenReturn(new BigDecimal("100.00"));
+        when(projection.getTotalPago()).thenReturn(new BigDecimal("60.00"));
+        when(projection.getSaldoRestante()).thenReturn(new BigDecimal("40.00"));
+        when(projection.getSituacaoPagamento()).thenReturn("PARCIAL");
+        when(comandaRepository.listarAReceber()).thenReturn(List.of(projection));
+
+        var resposta = comandaService.listarAReceber();
+
+        assertEquals(1, resposta.size());
+        assertEquals(1042L, resposta.getFirst().id());
+        assertEquals("Mesa 6", resposta.getFirst().identificacao());
+        assertEquals(fechadaEm, resposta.getFirst().fechadaEm());
+        assertEquals(new BigDecimal("100.00"), resposta.getFirst().total());
+        assertEquals(new BigDecimal("60.00"), resposta.getFirst().totalPago());
+        assertEquals(new BigDecimal("40.00"), resposta.getFirst().saldoRestante());
+        assertEquals(SituacaoPagamento.PARCIAL, resposta.getFirst().situacaoPagamento());
+    }
 
     @Test
     void deveAbrirComandaComIdentificacaoNovaSemEspacosNasExtremidades() {
